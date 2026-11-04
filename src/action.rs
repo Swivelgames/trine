@@ -25,6 +25,14 @@ impl fmt::Display for RegistrationError {
 
 impl std::error::Error for RegistrationError {}
 
+struct CloseEvents<Event>(InvocationContext<Event>);
+
+impl<Event> Drop for CloseEvents<Event> {
+	fn drop(&mut self) {
+		self.0.close_events();
+	}
+}
+
 /// Register a typed async handler once, then invoke it directly or through a view.
 pub struct Action<Input, Output, Error, Event> {
 	name: String,
@@ -98,14 +106,6 @@ impl<Input, Output, Error, Event> Action<Input, Output, Error, Event> {
 			let _completion = completion;
 			(self.handler)(input, context).await
 		}
-	}
-}
-
-struct CloseEvents<Event>(InvocationContext<Event>);
-
-impl<Event> Drop for CloseEvents<Event> {
-	fn drop(&mut self) {
-		self.0.close_events();
 	}
 }
 

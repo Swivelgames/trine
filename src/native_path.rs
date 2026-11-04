@@ -10,9 +10,6 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativePath(PathBuf);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathError(pub String);
 
@@ -23,6 +20,16 @@ impl fmt::Display for PathError {
 }
 
 impl std::error::Error for PathError {}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "platform", rename_all = "lowercase", deny_unknown_fields)]
+enum EncodedPath {
+	Unix { bytes: String },
+	Windows { wide: Vec<u16> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativePath(PathBuf);
 
 impl NativePath {
 	pub fn new(path: impl Into<PathBuf>) -> Result<Self, PathError> {
@@ -65,13 +72,6 @@ impl AsRef<Path> for NativePath {
 	fn as_ref(&self) -> &Path {
 		self.as_path()
 	}
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "platform", rename_all = "lowercase", deny_unknown_fields)]
-enum EncodedPath {
-	Unix { bytes: String },
-	Windows { wide: Vec<u16> },
 }
 
 impl Serialize for NativePath {

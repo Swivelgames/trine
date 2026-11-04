@@ -8,6 +8,11 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+pub(super) enum FieldValue {
+	Scalar(Value),
+	Path(NativePath),
+}
+
 #[derive(Debug, Default)]
 pub struct InputFields {
 	pub scalars: Map<String, Value>,
@@ -29,9 +34,4 @@ impl InputFields {
 		T::deserialize(deserialize::InputValue::Object(self))
 			.map_err(|error| CliError(format!("invalid action input: {error}")))
 	}
-}
-
-pub(super) enum FieldValue {
-	Scalar(Value),
-	Path(NativePath),
 }

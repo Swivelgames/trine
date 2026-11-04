@@ -394,3 +394,27 @@ profile has no discovery, initialization, replay, acknowledgments or MCP server.
 Run `python3 tests/smoke_rpc.py` for real subprocess observations. Native runtime
 verification recorded for this slice is Linux x86_64; Windows/macOS/ARM64 require
 native execution before claiming equivalent platform evidence.
+
+## Source organization
+
+Public modules act as stable facades over focused implementation modules. Moving
+an implementation does not require callers to change their imports.
+
+| Responsibility | Owner |
+| --- | --- |
+| Action catalog, discovery and interface selection | `application.rs` |
+| Typed entry and interface assembly | `application/entry.rs`, with CLI and structured assembly beneath `application/entry/` |
+| Invocation-scoped terminal output facilities | `application/presentation.rs` |
+| Generic typed-to-erased view adaptation | `view/erased.rs` |
+| Structured payload contracts | `structured/payload.rs` |
+| Structured invocation lifetime and output coordination | `structured/context.rs` |
+| Structured factory, default serialization and terminal guard | Focused modules under `structured/` |
+| CLI registry routing and retained dispatch reports | `registry.rs` and `registry/report.rs`, respectively |
+| RPC connection lifecycle and serialized output delivery | `rpc/host.rs` and `rpc/host/writer.rs`, respectively |
+
+Keep each capability's assembly with that capability. Keep small supporting types
+near the top of their owner's file; give substantial supporting behavior a focused
+submodule. Preserve existing public re-exports deliberately. These boundaries do
+not require one file per type, a fixed directory depth or additional crates. For
+example, the outbox's small queue and state helpers remain beside the outbox they
+support, and schema helpers remain together as one cohesive translation concern.

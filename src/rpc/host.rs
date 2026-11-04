@@ -1,5 +1,9 @@
 //! Connection admission, scheduling, and settlement. Wire presentation lives in `sink`.
 
+mod writer;
+
+use writer::write_messages;
+
 use super::{
 	Config,
 	framing::{self, Frame, Frames},
@@ -15,7 +19,7 @@ use crate::{
 };
 use futures_lite::{
 	future,
-	io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+	io::{AsyncRead, AsyncWrite},
 };
 use serde_json::{Value, json};
 use std::{
@@ -56,49 +60,6 @@ enum Input {
 	Frame(io::Result<Frame>),
 	Event(Result<Event, async_channel::RecvError>),
 	Shutdown,
-}
-
-async fn write_messages<W: AsyncWrite + Unpin>(
-	mut writer: W,
-	outbox: Outbox,
-	events: async_channel::Sender<Event>,
-	stop: Cancellation,
-) {
-	while let Some(message) = outbox.next().await {
-		let write = async {
-			writer.write_all(&message.bytes).await?;
-			writer.flush().await
-		};
-
-		let result = future::race(
-			async {
-				Some(
-					crate::execution::supervise(write)
-						.await
-						.unwrap_or_else(|_| Err(io::Error::other("RPC writer panicked"))),
-				)
-			},
-			async {
-				stop.cancelled().await;
-				None
-			},
-		)
-		.await;
-		match result {
-			None => break,
-			Some(Err(error)) => {
-				let _ = events.send(Event::WriterFailed(error.to_string())).await;
-				return;
-			}
-			Some(Ok(())) => {
-				if let Some(id) = message.terminal {
-					let _ = events.send(Event::Written(id)).await;
-				}
-			}
-		}
-	}
-
-	let _ = events.send(Event::WriterDone).await;
 }
 
 struct Connection {

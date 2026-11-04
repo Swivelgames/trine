@@ -14,15 +14,15 @@ pub(super) enum Scalar {
 }
 
 #[derive(Debug)]
-pub(super) struct Shape {
-	pub scalars: BTreeMap<String, Scalar>,
-	pub group: Option<Group>,
-}
-
-#[derive(Debug)]
 pub(super) struct Group {
 	pub field: String,
 	pub fields: BTreeMap<String, Scalar>,
+}
+
+#[derive(Debug)]
+pub(super) struct Shape {
+	pub scalars: BTreeMap<String, Scalar>,
+	pub group: Option<Group>,
 }
 
 impl Shape {

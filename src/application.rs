@@ -1,11 +1,13 @@
 //! Shared action catalog with explicit interface projections.
 
 mod entry;
+mod invocation_error;
 mod prepared;
-pub(crate) mod presentation;
+mod presentation;
 mod routing;
 
-pub use entry::Entry;
+pub use entry::{CliBinding, Entry};
+pub use invocation_error::InvocationError;
 pub use prepared::{
 	AsyncStructuredReport, PreparedCli, PreparedCliExecution, PreparedStructured, StructuredReport,
 };
@@ -14,81 +16,18 @@ pub use presentation::{CliCompletion, CliViewContext, Output};
 use crate::{
 	Cancellation, RegistrationError,
 	action::validate_name,
-	cli::{Alias, Bindings, CliError, Parsed},
+	cli::{CliError, Parsed},
 };
 use clap::Command;
 use routing::CliRoutes;
 use serde_json::Value;
-use std::{collections::BTreeMap, ffi::OsString, fmt, num::NonZeroUsize, sync::Arc};
+use std::{collections::BTreeMap, ffi::OsString, sync::Arc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interface {
 	Cli,
 	Rpc,
 	Mcp,
-}
-
-#[derive(Debug)]
-pub enum InvocationError {
-	Unavailable,
-	Input(crate::error::Failure),
-	Setup(crate::error::Failure),
-}
-
-impl fmt::Display for InvocationError {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Self::Unavailable => f.write_str("action unavailable for this interface"),
-			Self::Input(e) => write!(f, "invalid input: {e}"),
-			Self::Setup(e) => write!(f, "view setup failed: {e}"),
-		}
-	}
-}
-
-impl InvocationError {
-	pub fn kind(&self) -> crate::error::FailureKind {
-		use crate::error::FailureKind;
-		match self {
-			Self::Unavailable => FailureKind::Unavailable,
-			Self::Input(_) => FailureKind::InvalidInput,
-			Self::Setup(_) => FailureKind::ViewSetupFailed,
-		}
-	}
-}
-
-impl std::error::Error for InvocationError {
-	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-		match self {
-			Self::Unavailable => None,
-			Self::Input(error) | Self::Setup(error) => Some(error),
-		}
-	}
-}
-
-pub struct CliBinding {
-	bindings: Bindings,
-	aliases: Vec<Alias>,
-	capacity: Option<NonZeroUsize>,
-}
-
-impl CliBinding {
-	pub fn new(bindings: Bindings) -> Self {
-		Self {
-			bindings,
-			aliases: vec![],
-			capacity: NonZeroUsize::new(16),
-		}
-	}
-
-	pub fn alias(mut self, alias: Alias) -> Self {
-		self.aliases.push(alias);
-		self
-	}
-
-	pub fn capacity(mut self, capacity: Option<NonZeroUsize>) -> Self {
-		self.capacity = capacity;
-		self
-	}
 }
 
 type CliPrepare = dyn Fn(Vec<OsString>) -> Result<Parsed<PreparedCli>, CliError> + Send + Sync;

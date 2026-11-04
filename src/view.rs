@@ -1,5 +1,9 @@
 //! One typed view per invocation, driven independently of the action.
 
+mod erased;
+
+pub(crate) use erased::ErasedView;
+
 use crate::{
 	Action, Cancellation, InvocationContext,
 	execution::{ExecutionFailure, ExecutionOutcome, PresentationState},

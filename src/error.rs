@@ -14,6 +14,17 @@ pub enum FailureKind {
 	Panicked,
 }
 
+#[derive(Debug)]
+struct Message(String);
+
+impl fmt::Display for Message {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(&self.0)
+	}
+}
+
+impl Error for Message {}
+
 #[derive(Clone, Debug)]
 pub struct Failure {
 	pub kind: FailureKind,
@@ -66,14 +77,3 @@ impl From<&str> for Failure {
 		Self::from(message.to_owned())
 	}
 }
-
-#[derive(Debug)]
-struct Message(String);
-
-impl fmt::Display for Message {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(&self.0)
-	}
-}
-
-impl Error for Message {}
