@@ -1,0 +1,23 @@
+[package]
+name = "trine"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Experimental typed actions with schema-assisted CLI presentation"
+
+[dependencies]
+base64 = "0.22"
+async-channel = "2.5"
+clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "string"] }
+futures-lite = "2.6"
+schemars = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+smol = "2.0"
+
+[dev-dependencies]
+ctrlc = "3.5"
+
+[target.'cfg(unix)'.dependencies]
+async-io = "2.6"
+rustix = { version = "1.1", features = ["fs"] }

@@ -1,0 +1,77 @@
+//! Live, bounded JSON-RPC stdio profile over the shared action catalog.
+
+mod framing;
+mod host;
+mod outbox;
+mod protocol;
+mod sink;
+pub mod stdio;
+
+pub use host::{HostReport, serve};
+
+use std::io;
+
+/// Resource settings are local host policy, not protocol negotiation.
+#[derive(Clone, Debug)]
+pub struct Config {
+	pub input_frame_bytes: usize,
+	pub output_frame_bytes: usize,
+	pub id_bytes: usize,
+	pub history: usize,
+	pub active_invocations: usize,
+	pub output_messages: usize,
+	pub output_bytes: usize,
+	pub rejection_messages: usize,
+	pub rejection_bytes: usize,
+}
+
+impl Default for Config {
+	fn default() -> Self {
+		Self {
+			input_frame_bytes: 1 << 20,
+			output_frame_bytes: 1 << 20,
+			id_bytes: 256,
+			history: 4096,
+			active_invocations: 16,
+			output_messages: 64,
+			output_bytes: 4 << 20,
+			rejection_messages: 16,
+			rejection_bytes: 64 << 10,
+		}
+	}
+}
+
+impl Config {
+	pub fn validate(&self) -> io::Result<()> {
+		let event_capacity = self
+			.active_invocations
+			.checked_add(self.output_messages)
+			.and_then(|count| count.checked_add(2));
+
+		if event_capacity.is_none()
+			|| self.input_frame_bytes == 0
+			|| self.output_frame_bytes < 512
+			|| self.id_bytes == 0
+			|| self.history == 0
+			|| self.active_invocations == 0
+			|| self.output_messages == 0
+			|| self.rejection_messages == 0
+			|| self.output_bytes <= self.output_frame_bytes
+			|| self.rejection_bytes < 512
+		{
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"RPC limits must be nonzero and budgets must admit complete frames",
+			));
+		}
+
+		if self.id_bytes.saturating_mul(6).saturating_add(512) > self.output_frame_bytes {
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"output limit must admit an escaped ID and framework error",
+			));
+		}
+
+		Ok(())
+	}
+}
