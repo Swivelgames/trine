@@ -2,7 +2,7 @@
 
 use super::{StructuredContext, serde_view::SerdeView};
 use crate::{
-	error::Failure,
+	error::{Failure, FailureKind},
 	view::{ErasedView, View},
 };
 use serde::Serialize;
@@ -52,5 +52,24 @@ impl<O: Serialize + Sync + 'static, E: Serialize + Sync + 'static, P: Send + 'st
 		let mapper = Arc::new(mapper);
 		Self::custom(move |context| Ok(SerdeView::<O, E, P>::new(context, Some(mapper.clone()))))
 			.observe(capacity)
+	}
+}
+
+impl<O, E, P> StructuredBinding<O, E, P>
+where
+	O: Serialize + Sync + 'static,
+	E: Serialize + Sync + 'static,
+	P: Serialize + Send + 'static,
+{
+	/// Serialize progress with Serde when the invocation opts into observation.
+	/// Use `serde_with_progress` for a custom progress representation.
+	pub fn serde_progress(capacity: NonZeroUsize) -> Self {
+		Self::serde_with_progress(
+			|event| {
+				serde_json::to_value(event)
+					.map_err(|error| Failure::new(FailureKind::EncodingFailed, error))
+			},
+			capacity,
+		)
 	}
 }

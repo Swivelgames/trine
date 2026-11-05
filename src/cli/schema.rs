@@ -9,6 +9,7 @@ use crate::RegistrationError;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Scalar {
 	String,
+	StringList,
 	Boolean,
 	NativePath,
 }
@@ -38,6 +39,19 @@ impl Shape {
 				scalars.insert(field.clone(), scalar(root, schema, field)?);
 				continue;
 			}
+
+			let item = resolve(root, &schema["items"], field)?;
+			if item["type"] != "object" {
+				if scalar(root, item, field)? != Scalar::String {
+					return Err(unsupported(
+						field,
+						"only string scalar arrays are supported",
+					));
+				}
+				scalars.insert(field.clone(), Scalar::StringList);
+				continue;
+			}
+
 			if group.is_some() {
 				return Err(unsupported(
 					field,
@@ -45,7 +59,6 @@ impl Shape {
 				));
 			}
 
-			let item = resolve(root, &schema["items"], field)?;
 			let mut fields = BTreeMap::new();
 			for (child, schema) in object_properties(item, field)? {
 				fields.insert(

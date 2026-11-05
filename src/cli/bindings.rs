@@ -15,6 +15,7 @@ pub(super) struct Binding {
 
 /// Explicit CLI spellings for every input field. Group child fields use
 /// `repositories[].remote` notation; exactly one group anchor starts each row.
+/// String array fields bind as repeatable options, preserving occurrence order.
 #[derive(Clone, Debug, Default)]
 pub struct Bindings {
 	pub(super) fields: Vec<Binding>,
@@ -204,7 +205,7 @@ pub(super) fn validate_aliases(
 			let valid = match shape.scalars.get(field) {
 				Some(Scalar::String) => value.is_string(),
 				Some(Scalar::Boolean) => value.is_boolean(),
-				Some(Scalar::NativePath) | None => false,
+				Some(Scalar::NativePath | Scalar::StringList) | None => false,
 			};
 			if !valid {
 				return Err(RegistrationError(format!(

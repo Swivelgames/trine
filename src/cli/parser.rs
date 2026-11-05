@@ -17,8 +17,8 @@ pub(super) fn build_command(
 ) -> Command {
 	let mut command = Command::new(name.to_owned()).about(description.to_owned());
 	for binding in &bindings.fields {
-		// Append retains every occurrence. Normalization rejects duplicate fields
-		// while allowing a group's child to recur for separate repository rows.
+		// Append retains every occurrence. Normalization collects string arrays
+		// and grouped rows, while rejecting duplicate scalar fields.
 		let mut argument = Arg::new(argument_id(&binding.field))
 			.value_name(
 				binding
@@ -34,7 +34,7 @@ pub(super) fn build_command(
 		}
 
 		argument = match fields[&binding.field] {
-			Scalar::String => argument
+			Scalar::String | Scalar::StringList => argument
 				.num_args(1)
 				.value_parser(clap::builder::StringValueParser::new()),
 			Scalar::NativePath => argument
@@ -97,6 +97,13 @@ fn collect_occurrences<'a>(
 				.flatten()
 				.cloned()
 				.map(|value| FieldValue::Scalar(Value::String(value)))
+				.collect(),
+			Scalar::StringList => matches
+				.get_many::<String>(&argument_id(&binding.field))
+				.into_iter()
+				.flatten()
+				.cloned()
+				.map(FieldValue::RepeatedString)
 				.collect(),
 			Scalar::NativePath => matches
 				.get_many::<OsString>(&argument_id(&binding.field))
@@ -186,6 +193,18 @@ fn insert(
 	value: FieldValue,
 	binding: &Binding,
 ) -> Result<(), CliError> {
+	if let FieldValue::RepeatedString(value) = value {
+		let values = object
+			.scalars
+			.entry(field.to_owned())
+			.or_insert_with(|| Value::Array(Vec::new()));
+		values
+			.as_array_mut()
+			.expect("validated string array binding")
+			.push(Value::String(value));
+		return Ok(());
+	}
+
 	if object.scalars.contains_key(field) || object.paths.contains_key(field) {
 		return Err(CliError(format!(
 			"{} was supplied more than once for '{}'",
@@ -198,6 +217,7 @@ fn insert(
 		FieldValue::Scalar(value) => {
 			object.scalars.insert(field.to_owned(), value);
 		}
+		FieldValue::RepeatedString(_) => unreachable!("handled string array above"),
 		FieldValue::Path(path) => {
 			object.paths.insert(field.to_owned(), path);
 		}

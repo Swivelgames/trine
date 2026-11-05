@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 pub(super) enum FieldValue {
 	Scalar(Value),
+	RepeatedString(String),
 	Path(NativePath),
 }
 

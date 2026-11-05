@@ -347,3 +347,86 @@ fn both_execution_and_presentation_failures_survive_host_diagnostics() {
 	assert!(report.transcript.diagnostics[0].contains("handler exploded"));
 	assert!(report.transcript.diagnostics[0].contains("writer failed"));
 }
+
+#[test]
+fn serde_progress_requires_invocation_opt_in_and_preserves_terminal() {
+	#[derive(serde::Serialize)]
+	struct Update {
+		step: usize,
+	}
+	let action = Action::new(
+		"updates",
+		"Updates",
+		|_: Input, context: InvocationContext<Update>| async move {
+			context.emit(Update { step: 1 }).await.unwrap();
+			Ok::<_, ()>("complete")
+		},
+	)
+	.unwrap();
+	let mut app = Application::new("demo", "1").unwrap();
+	app.register(Entry::new(action).rpc(StructuredBinding::serde_progress(
+		NonZeroUsize::new(1).unwrap(),
+	)))
+	.unwrap();
+
+	for observe in [false, true] {
+		let report = app
+			.invoke_rpc(&["updates"], json!({}), observe, Cancellation::new())
+			.unwrap();
+		assert!(report.execution.presentation_succeeded);
+		assert_eq!(
+			report.transcript.progress,
+			if observe {
+				vec![json!({"step":1})]
+			} else {
+				vec![]
+			}
+		);
+		assert_eq!(
+			report.transcript.terminal,
+			Some(Payload::Success(json!("complete")))
+		);
+	}
+}
+
+#[test]
+fn serde_progress_encoding_failure_keeps_action_result_and_classifies_failure() {
+	struct Unencodable;
+	impl serde::Serialize for Unencodable {
+		fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+			Err(serde::ser::Error::custom("progress cannot be encoded"))
+		}
+	}
+	let action = Action::new(
+		"updates",
+		"Updates",
+		|_: Input, context: InvocationContext<Unencodable>| async move {
+			let _ = context.emit(Unencodable).await;
+			Ok::<_, ()>("settled")
+		},
+	)
+	.unwrap();
+	let mut app = Application::new("demo", "1").unwrap();
+	app.register(Entry::new(action).rpc(StructuredBinding::serde_progress(
+		NonZeroUsize::new(1).unwrap(),
+	)))
+	.unwrap();
+	let report = app
+		.invoke_rpc(&["updates"], json!({}), true, Cancellation::new())
+		.unwrap();
+	assert_eq!(
+		report.execution.presentation_failure(),
+		Some(trine::error::FailureKind::EncodingFailed)
+	);
+	assert!(report.transcript.terminal.is_none());
+	assert!(report.transcript.progress.is_empty());
+	assert!(report.execution.domain_succeeded);
+	assert!(
+		report
+			.execution
+			.presentation_cause()
+			.unwrap()
+			.to_string()
+			.contains("progress cannot be encoded")
+	);
+}
