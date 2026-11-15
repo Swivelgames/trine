@@ -1,5 +1,8 @@
 //! Invocation-scoped CLI output facilities and completion policy.
 
+#[cfg(feature = "cli-confirmation")]
+mod confirmation;
+
 use std::{
 	io::{self, IsTerminal, Write},
 	sync::{Arc, Mutex},

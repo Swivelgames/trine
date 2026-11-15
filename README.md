@@ -418,3 +418,22 @@ submodule. Preserve existing public re-exports deliberately. These boundaries do
 not require one file per type, a fixed directory depth or additional crates. For
 example, the outbox's small queue and state helpers remain beside the outbox they
 support, and schema helpers remain together as one cohesive translation concern.
+
+### Optional terminal confirmations
+
+Enable `cli-confirmation` to use `CliViewContext::confirm` from a CLI view's
+`confirm` callback. The helper uses Inquire with only its Crossterm backend enabled,
+reads the real terminal input and renders prompts on real stderr. It is available
+only when stdin, stderr and the view's stderr capability are terminal-enabled;
+redirected stdout stays free of prompt output. Workyard-style application policy
+still decides which questions to ask and what unsupported interaction means.
+
+Ctrl+C maps to invocation cancellation after Inquire restores terminal modes.
+Escape and Ctrl+D decline, and an EOF never grants consent. The synchronous prompt
+runs on the joined presentation worker: external token cancellation does not wake
+an active terminal read automatically. No reader thread is abandoned. Structured
+invocations do not subscribe to confirmation requests and return `None` immediately.
+
+Before presenting a confirmation, the CLI view driver completes delivery of progress
+already accepted by the invocation. Applications can disclose facts once through
+progress and ask a short question without repeating those facts inside the prompt.

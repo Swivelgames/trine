@@ -1,5 +1,6 @@
 //! One typed view per invocation, driven independently of the action.
 
+mod confirmation;
 mod erased;
 
 pub(crate) use erased::ErasedView;
@@ -18,6 +19,14 @@ use std::{
 pub trait View<Output, Error, Event>: Send {
 	type Error: Send;
 	type Completion: Send;
+
+	fn confirm(
+		&mut self,
+		_request: crate::invocation::Confirmation,
+		_cancellation: Cancellation,
+	) -> impl Future<Output = Result<Option<bool>, Self::Error>> + Send {
+		async { Ok(None) }
+	}
 
 	fn progress(&mut self, event: Event) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
@@ -52,10 +61,12 @@ where
 		None => (InvocationContext::unobserved(cancellation.clone()), None),
 	};
 
+	let (context, confirmations) = context.with_confirmations();
 	std::thread::scope(|scope| {
 		let (terminal_tx, terminal_rx) =
 			async_channel::bounded::<Arc<ExecutionOutcome<Output, Error>>>(1);
-		let worker = scope.spawn(move || render_worker(view, events, terminal_rx, cancellation));
+		let worker = scope
+			.spawn(move || render_worker(view, events, confirmations, terminal_rx, cancellation));
 
 		// Keep the result here even if a failed consumer has already exited.
 		let result = catch_unwind(AssertUnwindSafe(|| {
@@ -89,6 +100,7 @@ where
 fn render_worker<O, E, P, V>(
 	mut view: V,
 	events: Option<async_channel::Receiver<P>>,
+	confirmations: crate::invocation::Requests,
 	terminal_rx: async_channel::Receiver<Arc<ExecutionOutcome<O, E>>>,
 	cancellation: Cancellation,
 ) -> PresentationState<V::Completion, PresentationError<V::Error>>
@@ -100,13 +112,50 @@ where
 {
 	let rendered = catch_unwind(AssertUnwindSafe(|| {
 		smol::block_on(async {
-			if let Some(events) = &events {
-				while let Ok(event) = events.recv().await {
-					if let Err(error) = view.progress(event).await {
-						events.close();
-						cancellation.cancel();
-						return PresentationState::Failed(PresentationError::Output(error));
+			let mut progress_open = events.is_some();
+			let mut confirmations_open = true;
+			while progress_open || confirmations_open {
+				let progress = async {
+					if !progress_open {
+						return std::future::pending().await;
 					}
+					Delivery::Progress(
+						events
+							.as_ref()
+							.expect("progress receiver")
+							.recv()
+							.await
+							.ok(),
+					)
+				};
+				let confirmation = async {
+					if !confirmations_open {
+						return std::future::pending().await;
+					}
+					Delivery::Confirmation(confirmations.recv().await.ok())
+				};
+				let result = match futures_lite::future::or(progress, confirmation).await {
+					Delivery::Progress(Some(event)) => view.progress(event).await,
+					Delivery::Progress(None) => {
+						progress_open = false;
+						continue;
+					}
+					Delivery::Confirmation(Some(request)) => {
+						confirmation::deliver(&mut view, events.as_ref(), request, &cancellation)
+							.await
+					}
+					Delivery::Confirmation(None) => {
+						confirmations_open = false;
+						continue;
+					}
+				};
+				if let Err(error) = result {
+					if let Some(events) = &events {
+						events.close();
+					}
+					confirmations.close();
+					cancellation.cancel();
+					return PresentationState::Failed(PresentationError::Output(error));
 				}
 			}
 
@@ -132,4 +181,9 @@ where
 			PresentationState::Failed(PresentationError::Panicked)
 		}
 	}
+}
+
+enum Delivery<P> {
+	Progress(Option<P>),
+	Confirmation(Option<crate::invocation::Request>),
 }

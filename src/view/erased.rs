@@ -8,6 +8,11 @@ type ViewFuture<'a, C = ()> = Pin<Box<dyn Future<Output = Result<C, Failure>> + 
 
 trait DynView<O, E, P, C>: Send {
 	fn progress(&mut self, event: P) -> ViewFuture<'_>;
+	fn confirm(
+		&mut self,
+		request: crate::invocation::Confirmation,
+		cancellation: crate::Cancellation,
+	) -> ViewFuture<'_, Option<bool>>;
 
 	fn finish<'a>(&'a mut self, outcome: &'a Result<O, E>) -> ViewFuture<'a, C>;
 }
@@ -20,6 +25,19 @@ where
 	V::Completion: Into<C>,
 	V::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
+	fn confirm(
+		&mut self,
+		request: crate::invocation::Confirmation,
+		cancellation: crate::Cancellation,
+	) -> ViewFuture<'_, Option<bool>> {
+		Box::pin(async move {
+			self.0
+				.confirm(request, cancellation)
+				.await
+				.map_err(|e| Failure::from_box(FailureKind::OutputFailed, e.into()))
+		})
+	}
+
 	fn progress(&mut self, event: P) -> ViewFuture<'_> {
 		Box::pin(async move {
 			self.0
@@ -55,6 +73,14 @@ impl<O: Sync, E: Sync, P: Send + 'static, C: Send> ErasedView<O, E, P, C> {
 impl<O: Sync, E: Sync, P: Send + 'static, C: Send> View<O, E, P> for ErasedView<O, E, P, C> {
 	type Completion = C;
 	type Error = Failure;
+
+	async fn confirm(
+		&mut self,
+		request: crate::invocation::Confirmation,
+		cancellation: crate::Cancellation,
+	) -> Result<Option<bool>, Failure> {
+		self.0.confirm(request, cancellation).await
+	}
 
 	async fn progress(&mut self, event: P) -> Result<(), Failure> {
 		self.0.progress(event).await

@@ -1,5 +1,9 @@
 //! Invocation-scoped cooperative cancellation and optional bounded progress.
 
+mod confirmation;
+pub use confirmation::Confirmation;
+pub(crate) use confirmation::{Request, Requests};
+
 use std::{fmt, num::NonZeroUsize};
 
 use async_channel::{Receiver, Sender};
@@ -65,6 +69,7 @@ impl std::error::Error for EmitError {}
 pub struct InvocationContext<Event> {
 	cancellation: Cancellation,
 	events: Option<Sender<Event>>,
+	confirmations: Option<Sender<Request>>,
 }
 
 impl<Event> Clone for InvocationContext<Event> {
@@ -72,6 +77,7 @@ impl<Event> Clone for InvocationContext<Event> {
 		Self {
 			cancellation: self.cancellation.clone(),
 			events: self.events.clone(),
+			confirmations: self.confirmations.clone(),
 		}
 	}
 }
@@ -81,6 +87,7 @@ impl<Event> InvocationContext<Event> {
 		Self {
 			cancellation,
 			events: None,
+			confirmations: None,
 		}
 	}
 
@@ -90,9 +97,24 @@ impl<Event> InvocationContext<Event> {
 			Self {
 				cancellation,
 				events: Some(events),
+				confirmations: None,
 			},
 			receiver,
 		)
+	}
+
+	pub(crate) fn with_confirmations(mut self) -> (Self, Requests) {
+		let (sender, receiver) = async_channel::bounded(1);
+		self.confirmations = Some(sender);
+		(self, receiver)
+	}
+
+	/// Ask the selected view. Unsubscribed interfaces return None immediately.
+	pub async fn confirm(&self, confirmation: Confirmation) -> Result<Option<bool>, EmitError> {
+		let Some(requests) = &self.confirmations else {
+			return Ok(None);
+		};
+		confirmation::ask(requests, confirmation, &self.cancellation).await
 	}
 
 	pub fn cancellation(&self) -> &Cancellation {
@@ -122,6 +144,9 @@ impl<Event> InvocationContext<Event> {
 	/// Stop accepting events; already accepted events remain available to drain.
 	/// Action completion calls this even if a handler retains a context clone.
 	pub fn close_events(&self) {
+		if let Some(confirmations) = &self.confirmations {
+			confirmations.close();
+		}
 		if let Some(events) = &self.events {
 			events.close();
 		}

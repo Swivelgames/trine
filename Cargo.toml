@@ -14,6 +14,7 @@ schemars = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 smol = "2.0"
+inquire = { version = "0.9.4", default-features = false, features = ["crossterm"], optional = true }
 
 [dev-dependencies]
 ctrlc = "3.5"
@@ -21,3 +22,6 @@ ctrlc = "3.5"
 [target.'cfg(unix)'.dependencies]
 async-io = "2.6"
 rustix = { version = "1.1", features = ["fs"] }
+
+[features]
+cli-confirmation = ["dep:inquire"]
