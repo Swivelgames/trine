@@ -390,20 +390,14 @@ fn completion_projection_preserves_native_hints_and_namespace_flags() {
 		.find(|arg| arg.get_id() == "input-path")
 		.unwrap();
 	assert_eq!(path.get_value_hint(), clap::ValueHint::AnyPath);
-	for shell in [
-		trine::cli::completion::Shell::Bash,
-		trine::cli::completion::Shell::Zsh,
-		trine::cli::completion::Shell::Fish,
-		trine::cli::completion::Shell::PowerShell,
-	] {
-		let script = trine::cli::completion::generate(&mut command.clone(), shell);
-		let script = String::from_utf8(script).unwrap();
-		assert!(script.contains("task"));
-		assert!(script.contains("checkout"));
-		assert!(script.contains("json"));
-		if shell == trine::cli::completion::Shell::Zsh {
-			assert!(script.contains("'::input-path:_files'"));
-			assert!(!script.contains("'::input:path:"));
-		}
-	}
+	let candidates = trine::cli::completion::complete(
+		command.clone(),
+		trine::cli::completion::Context {
+			arguments: ["demo", "task", ""].map(Into::into).to_vec(),
+			index: 2,
+			cwd: std::env::current_dir().unwrap(),
+		},
+	)
+	.unwrap();
+	assert!(candidates.contains(&"checkout".into()));
 }

@@ -47,6 +47,18 @@ pub(super) fn build_command(
 				.default_missing_value("true")
 				.value_parser(clap::value_parser!(bool)),
 		};
+		if let Some(provider) = bindings.completions.get(&binding.field) {
+			argument = argument.add(provider.clone());
+		}
+		if let Some((group, anchor)) = &bindings.group {
+			let anchor = format!("{group}[].{anchor}");
+			if binding.field.starts_with(&format!("{group}[].")) && binding.field != anchor {
+				argument = argument.add(super::completion::GroupChild {
+					anchor: argument_id(&anchor),
+				});
+			}
+		}
+
 		command = command.arg(argument);
 	}
 

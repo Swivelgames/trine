@@ -21,9 +21,40 @@ pub struct Bindings {
 	pub(super) fields: Vec<Binding>,
 	pub(super) group: Option<(String, String)>,
 	pub(super) native_paths: BTreeSet<String>,
+	pub(super) completions: BTreeMap<String, super::completion::Provider>,
 }
 
 impl Bindings {
+	/// Suggest domain values for a field without executing its action.
+	pub fn complete(
+		mut self,
+		field: impl Into<String>,
+		suggest: impl Fn(&super::completion::Context, &std::ffi::OsStr) -> Vec<std::ffi::OsString>
+		+ Send
+		+ Sync
+		+ 'static,
+	) -> Self {
+		self.completions
+			.insert(field.into(), super::completion::Provider::new(suggest));
+		self
+	}
+
+	/// Give domain suggestions a named group, shown before ordinary options.
+	pub fn complete_group(
+		mut self,
+		field: impl Into<String>,
+		group: impl Into<String>,
+		suggest: impl Fn(&super::completion::Context, &std::ffi::OsStr) -> Vec<std::ffi::OsString>
+		+ Send
+		+ Sync
+		+ 'static,
+	) -> Self {
+		let mut provider = super::completion::Provider::new(suggest);
+		provider.group = Some(group.into());
+		self.completions.insert(field.into(), provider);
+		self
+	}
+
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -93,6 +124,14 @@ pub(super) fn validate_bindings(
 	shape: &Shape,
 	fields: &BTreeMap<String, Scalar>,
 ) -> Result<(), RegistrationError> {
+	for field in bindings.completions.keys() {
+		if !fields.contains_key(field) {
+			return Err(RegistrationError(format!(
+				"completion references unknown field '{field}'"
+			)));
+		}
+	}
+
 	for (field, scalar) in fields {
 		if (*scalar == Scalar::NativePath) != bindings.native_paths.contains(field) {
 			return Err(RegistrationError(format!(

@@ -476,5 +476,31 @@ rejected during registration. Progress types do not require serialization.
 aliases, namespaces and JSON support. Hosts may add their own commands to that
 projection and call `cli::completion::generate(&mut command, shell)`. Generation
 returns script bytes without writing files or modifying shell configuration.
-Native-path bindings supply filesystem completion hints. Dynamic domain suggestions
-are a separate follow-up capability.
+Native-path bindings retain filesystem suggestions. Register domain suggestions with
+`Bindings::complete("field", provider)`. Providers receive `completion::Context`
+(native partial arguments, cursor index and working directory) plus the current
+value. They return candidate `OsString`s without constructing an action or view.
+Use `Bindings::complete_group("field", "Tasks", provider)` to give suggestions a
+semantic label. Zsh displays named domain groups before options and retains existing
+help descriptions. Its normal completion styles control formatting; absent a format
+style, headings remain visible. Candidate values are separate from display text.
+
+Repeated-group child options become suggestions only after a complete anchor value
+before the cursor, using the declared binding relationship rather than flag prefixes.
+This advisory filtering does not change action parsing or validate repository paths.
+
+`Context::option` distinguishes absent, supplied and ambiguous options, including
+placement flags after the cursor. An empty provider result never enables file fallback.
+
+Hosts check `completion::requested()` before normal parsing, then call
+`completion::respond(command, arguments, cwd)`. Completion failures should return
+no candidates without diagnostics. Query transport is private to generated scripts;
+reload scripts after upgrading. Bash/Zsh/Fish/PowerShell registrations are narrowly
+owned adapters around the pinned clap_complete dynamic engine. They never evaluate
+command-line text. Bash uses a literal tokenizer to preserve values across Readline
+word breaks; unresolved shell expansions yield no suggestions. Candidates that the
+shell line protocol cannot represent faithfully are omitted, not converted lossily.
+Native input paths remain intact. Bash versions without `compopt` retain no-space
+continuation for all candidates; users add the separating space themselves. Fish
+and PowerShell native execution still require platform acceptance; Rust transport
+coverage does not establish shell execution.
