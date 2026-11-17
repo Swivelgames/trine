@@ -2,6 +2,7 @@
 
 mod entry;
 mod invocation_error;
+pub mod json;
 mod prepared;
 mod presentation;
 mod routing;
@@ -190,6 +191,11 @@ impl Application {
 			})
 			.map(|entry| &entry.info)
 			.collect()
+	}
+
+	/// Project the registered commands for help, host composition and completions.
+	pub fn cli_command(&self) -> Command {
+		self.cli_routes.command(&self.program, &self.version)
 	}
 
 	pub fn parse_cli(

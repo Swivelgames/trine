@@ -85,12 +85,16 @@ fn shared_handler_selects_fresh_views_and_preserves_alias_and_native_input() {
 	app.register(
 		Entry::new(action(calls.clone()))
 			.namespace(["task"])
-			.cli(binding(), move |_| {
-				count.fetch_add(1, Ordering::SeqCst);
-				Ok(CliView {
-					received: output.clone(),
-				})
-			})
+			.cli(
+				binding(),
+				move |_| {
+					count.fetch_add(1, Ordering::SeqCst);
+					Ok(CliView {
+						received: output.clone(),
+					})
+				},
+				|result| u8::from(result.is_err()),
+			)
 			.rpc(StructuredBinding::serde())
 			.mcp(StructuredBinding::custom(|context| {
 				Ok(CustomView { context })
@@ -177,12 +181,16 @@ fn unavailable_invalid_and_help_do_not_construct_views_or_execute() {
 	let mut app = Application::new("demo", "1").unwrap();
 	app.register(
 		Entry::new(action(calls.clone()))
-			.cli(binding(), move |_| {
-				count.fetch_add(1, Ordering::SeqCst);
-				Ok(CliView {
-					received: Arc::default(),
-				})
-			})
+			.cli(
+				binding(),
+				move |_| {
+					count.fetch_add(1, Ordering::SeqCst);
+					Ok(CliView {
+						received: Arc::default(),
+					})
+				},
+				|result| u8::from(result.is_err()),
+			)
 			.rpc(StructuredBinding::serde()),
 	)
 	.unwrap();
@@ -222,7 +230,11 @@ fn factory_errors_precede_handlers_for_each_interface() {
 	let mut app = Application::new("demo", "1").unwrap();
 	app.register(
 		Entry::new(action(calls.clone()))
-			.cli(binding(), |_| Err::<CliView, _>("no output".into()))
+			.cli(
+				binding(),
+				|_| Err::<CliView, _>("no output".into()),
+				|result| u8::from(result.is_err()),
+			)
 			.rpc(StructuredBinding::custom(|_| {
 				Err::<CustomView, _>("no output".into())
 			})),
@@ -266,15 +278,20 @@ fn registration_failure_publishes_no_structured_or_cli_entry() {
 					received: Arc::default(),
 				})
 			},
+			|result| u8::from(result.is_err()),
 		),
 	)
 	.unwrap();
 	assert!(
 		app.register(
 			Entry::new(action(Arc::default()))
-				.cli(binding(), |_| Ok(CliView {
-					received: Arc::default()
-				}))
+				.cli(
+					binding(),
+					|_| Ok(CliView {
+						received: Arc::default()
+					}),
+					|result| u8::from(result.is_err())
+				)
 				.rpc(StructuredBinding::serde())
 		)
 		.is_err()
@@ -306,39 +323,77 @@ fn registration_failure_publishes_no_structured_or_cli_entry() {
 }
 
 #[test]
-fn cli_only_types_need_no_serialization() {
-	struct Output;
+fn standard_cli_supports_json_without_rpc_or_serialized_progress() {
+	#[derive(Serialize)]
+	struct LocalOutput {
+		ready: bool,
+	}
+
+	#[derive(Serialize)]
 	struct Error;
 	struct Progress;
 	struct LocalView;
-	impl View<Output, Error, Progress> for LocalView {
+
+	impl View<LocalOutput, Error, Progress> for LocalView {
 		type Completion = ();
 		type Error = trine::error::Failure;
 		async fn progress(&mut self, _: Progress) -> Result<(), trine::error::Failure> {
 			Ok(())
 		}
-		async fn finish(&mut self, _: &Result<Output, Error>) -> Result<(), trine::error::Failure> {
+		async fn finish(
+			&mut self,
+			_: &Result<LocalOutput, Error>,
+		) -> Result<(), trine::error::Failure> {
 			Ok(())
 		}
 	}
+
 	let action = Action::new(
 		"local",
 		"Local",
-		|_: Input, _: InvocationContext<Progress>| async { Ok::<_, Error>(Output) },
+		|_: Input, _: InvocationContext<Progress>| async {
+			Ok::<_, Error>(LocalOutput { ready: true })
+		},
 	)
 	.unwrap();
 	let mut app = Application::new("demo", "1").unwrap();
-	app.register(Entry::new(action).cli(binding(), |_| Ok(LocalView)))
-		.unwrap();
-	let Parsed::Input(prepared) = app.parse_cli(["demo", "local", "--path", "api"]).unwrap() else {
+	app.register(Entry::new(action).cli(
+		binding(),
+		|_| -> Result<LocalView, trine::error::Failure> {
+			panic!("JSON must not construct the human view")
+		},
+		|result| u8::from(result.is_err()),
+	))
+	.unwrap();
+
+	let Parsed::Input(prepared) = app
+		.parse_cli(["demo", "local", "--path", "api", "--json"])
+		.unwrap()
+	else {
 		panic!()
 	};
-	assert!(
-		prepared
-			.run(CliViewContext::default(), Cancellation::new())
-			.unwrap()
-			.domain_succeeded
+	assert!(app.discover(Interface::Rpc).is_empty());
+
+	let stdout = CaptureWriter::default();
+	let stderr = CaptureWriter::default();
+	let report = prepared
+		.run(
+			CliViewContext {
+				stdout: Output::new(stdout.clone()),
+				stderr: Output::new(stderr.clone()),
+			},
+			Cancellation::new(),
+		)
+		.unwrap();
+
+	let document: serde_json::Value =
+		serde_json::from_slice(&stdout.bytes.lock().unwrap()).unwrap();
+	assert_eq!(
+		document,
+		json!({"exit_code": 0, "result": {"ready": true}, "error": null})
 	);
+	assert_eq!(report.exit_code(), 0);
+	assert!(stderr.bytes.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -396,6 +451,7 @@ fn application_preserves_host_native_paths_and_custom_assembly() {
 				received: output.clone(),
 			})
 		},
+		|result| u8::from(result.is_err()),
 	))
 	.unwrap();
 	let Parsed::Input(prepared) = app
@@ -457,9 +513,11 @@ impl View<Input, String, Event> for OutputView {
 
 fn output_application() -> Application {
 	let mut app = Application::new("demo", "1").unwrap();
-	app.register(
-		Entry::new(action(Arc::default())).cli(binding(), |context| Ok(OutputView(context))),
-	)
+	app.register(Entry::new(action(Arc::default())).cli(
+		binding(),
+		|context| Ok(OutputView(context)),
+		|result| u8::from(result.is_err()),
+	))
 	.unwrap();
 	app
 }
@@ -544,16 +602,15 @@ fn buffered_cli_flush_failure_preserves_successful_domain_outcome() {
 
 #[test]
 fn cli_completion_overrides_domain_default_without_host_downcasts() {
-	use trine::application::CliCompletion;
-	struct CompletionView<C>(C);
-	impl<C: Clone + Send> View<(), (), ()> for CompletionView<C> {
-		type Completion = C;
+	struct CompletionView;
+	impl View<(), (), ()> for CompletionView {
+		type Completion = ();
 		type Error = io::Error;
 		async fn progress(&mut self, _: ()) -> io::Result<()> {
 			Ok(())
 		}
-		async fn finish(&mut self, _: &Result<(), ()>) -> io::Result<C> {
-			Ok(self.0.clone())
+		async fn finish(&mut self, _: &Result<(), ()>) -> io::Result<()> {
+			Ok(())
 		}
 	}
 	let action = |name| {
@@ -567,8 +624,12 @@ fn cli_completion_overrides_domain_default_without_host_downcasts() {
 		.unwrap()
 	};
 	let mut app = Application::new("demo", "1").unwrap();
-	app.register(Entry::new(action("default")).cli(binding(), |_| Ok(CompletionView(()))))
-		.unwrap();
+	app.register(Entry::new(action("default")).cli(
+		binding(),
+		|_| Ok(CompletionView),
+		|result| u8::from(result.is_err()),
+	))
+	.unwrap();
 	// Avoid duplicate checkout aliases: this second entry only needs the input fields.
 	let explicit_binding = CliBinding::new(
 		Bindings::new()
@@ -576,9 +637,11 @@ fn cli_completion_overrides_domain_default_without_host_downcasts() {
 			.native_path("path")
 			.option("checkout", "checkout"),
 	);
-	app.register(Entry::new(action("explicit")).cli(explicit_binding, |_| {
-		Ok(CompletionView(CliCompletion::exit(42)))
-	}))
+	app.register(Entry::new(action("explicit")).cli(
+		explicit_binding,
+		|_| Ok(CompletionView),
+		|_| 42,
+	))
 	.unwrap();
 	for (name, fail, expected) in [
 		("default", false, 0),
@@ -709,7 +772,11 @@ fn diagnostic_renderers_are_selected_by_invocation_interface() {
 	}
 	app.register(
 		Entry::new(action(Arc::default()))
-			.cli(binding(), |_| Ok(FailingView))
+			.cli(
+				binding(),
+				|_| Ok(FailingView),
+				|result| u8::from(result.is_err()),
+			)
 			.rpc(StructuredBinding::custom(|_| Ok(FailingView)))
 			.mcp(StructuredBinding::custom(|_| Ok(FailingView))),
 	)

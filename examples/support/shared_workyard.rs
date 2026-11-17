@@ -188,7 +188,7 @@ struct CreateView {
 }
 
 impl View<CreateOutcome, CreateError, CreateProgress> for CreateView {
-	type Completion = trine::application::CliCompletion;
+	type Completion = ();
 	type Error = io::Error;
 
 	async fn progress(&mut self, event: CreateProgress) -> io::Result<()> {
@@ -202,21 +202,14 @@ impl View<CreateOutcome, CreateError, CreateProgress> for CreateView {
 		&mut self,
 		result: &Result<CreateOutcome, CreateError>,
 	) -> io::Result<Self::Completion> {
-		let (value, code) = match result {
-			Ok(outcome) => (
-				serde_json::to_value(outcome)?,
-				if matches!(outcome, CreateOutcome::Cancelled { .. }) {
-					1
-				} else {
-					0
-				},
-			),
-			Err(error) => (serde_json::to_value(error)?, 1),
+		let value = match result {
+			Ok(outcome) => serde_json::to_value(outcome)?,
+			Err(error) => serde_json::to_value(error)?,
 		};
 		let mut bytes = serde_json::to_vec(&value)?;
 		bytes.push(b'\n');
 		self.output.stdout.write_all(&bytes)?;
-		Ok(trine::application::CliCompletion::exit(code))
+		Ok(())
 	}
 }
 
@@ -276,7 +269,11 @@ fn application_with_create(
 	.alias(Alias::new("checkout").set("checkout", true));
 	app.register(
 		Entry::new(create_action)
-			.cli(create_binding, |output| Ok(CreateView { output }))
+			.cli(
+				create_binding,
+				|output| Ok(CreateView { output }),
+				|result| u8::from(!matches!(result, Ok(CreateOutcome::Completed { .. }))),
+			)
 			.rpc(StructuredBinding::serde_with_progress(
 				|event: CreateProgress| {
 					Ok(serde_json::json!({"path":event.path,"phase":event.phase}))
@@ -304,7 +301,11 @@ fn application_with_create(
 	.capacity(None);
 	app.register(
 		Entry::new(list_action)
-			.cli(list_binding, |output| Ok(ListView { output }))
+			.cli(
+				list_binding,
+				|output| Ok(ListView { output }),
+				|result| u8::from(result.is_err()),
+			)
 			.rpc(StructuredBinding::serde())
 			.mcp(StructuredBinding::custom(|context| {
 				Ok(ListMcpView { context })
@@ -425,7 +426,7 @@ mod tests {
 	}
 
 	#[test]
-	fn create_explicit_completion_and_list_unit_completion_share_dispatch() {
+	fn create_and_list_exit_policies_share_dispatch() {
 		let app = application().unwrap();
 		for args in [
 			vec![

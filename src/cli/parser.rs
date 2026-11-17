@@ -38,6 +38,7 @@ pub(super) fn build_command(
 				.num_args(1)
 				.value_parser(clap::builder::StringValueParser::new()),
 			Scalar::NativePath => argument
+				.value_hint(clap::ValueHint::AnyPath)
 				.num_args(1)
 				.value_parser(clap::builder::OsStringValueParser::new()),
 			Scalar::Boolean => argument
@@ -233,5 +234,45 @@ fn label(binding: &Binding) -> String {
 }
 
 fn argument_id(field: &str) -> String {
-	format!("input:{field}")
+	// Completion generators can expose IDs as shell syntax, so keep them free of
+	// separators and quoting characters. Encode bytes rather than replacing them
+	// to preserve distinct schema field names (including the escape marker).
+	let mut id = String::from("input-");
+	for byte in field.bytes() {
+		if byte.is_ascii_alphanumeric() || byte == b'-' {
+			id.push(char::from(byte));
+		} else {
+			use std::fmt::Write;
+			write!(id, "_{byte:02x}").expect("writing to a String cannot fail");
+		}
+	}
+	id
+}
+
+#[cfg(test)]
+mod tests {
+	use super::argument_id;
+	use std::collections::BTreeSet;
+
+	#[test]
+	fn argument_ids_are_shell_safe_without_collapsing_schema_fields() {
+		let fields = [
+			"task",
+			"a:b",
+			"a_b",
+			"a_3ab",
+			"a-b",
+			"repo[].path",
+			"a'b",
+			"路径",
+		];
+		let ids: BTreeSet<_> = fields.into_iter().map(argument_id).collect();
+
+		assert_eq!(argument_id("task"), "input-task");
+		assert_eq!(ids.len(), fields.len());
+		assert!(ids.iter().all(|id| {
+			id.bytes()
+				.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+		}));
+	}
 }

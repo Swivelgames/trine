@@ -14,6 +14,21 @@ pub enum FailureKind {
 	Panicked,
 }
 
+impl FailureKind {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Unavailable => "unavailable",
+			Self::InvalidInput => "invalid_input",
+			Self::ViewSetupFailed => "view_setup_failed",
+			Self::EncodingFailed => "encoding_failed",
+			Self::OutputTooLarge => "output_too_large",
+			Self::OutputFailed => "output_failed",
+			Self::ContractViolation => "contract_violation",
+			Self::Panicked => "panicked",
+		}
+	}
+}
+
 #[derive(Debug)]
 struct Message(String);
 

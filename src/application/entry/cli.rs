@@ -1,16 +1,15 @@
 //! CLI binding, parsing metadata and invocation view assembly.
 
-use crate::application::{
-	CliCompletion, CliRegistration, CliViewContext, InvocationError, Output, PreparedCli,
-	PreparedCliExecution,
-};
+mod execution;
+
+use crate::application::json::JsonProjection;
+use crate::application::{CliRegistration, CliViewContext, InvocationError, PreparedCli};
 use crate::{
 	Action, Cancellation,
 	cli::{Alias, Bindings, Cli, CliError, InputFields, Parsed},
-	diagnostics::{self, Diagnostic, DiagnosticRenderer},
-	error::{Failure, FailureKind},
-	registry::DispatchReport,
-	view::{self, ErasedView, View},
+	diagnostics::DiagnosticRenderer,
+	error::Failure,
+	view::{ErasedView, View},
 };
 use std::{num::NonZeroUsize, sync::Arc};
 
@@ -48,14 +47,14 @@ pub(super) fn build_cli_registration<I, O, E, P, V, F, A>(
 	binding: CliBinding,
 	assemble: A,
 	factory: F,
+	projection: JsonProjection<O, E>,
 ) -> Result<CliRegistration, crate::RegistrationError>
 where
 	I: Send + 'static,
 	O: Send + Sync + 'static,
 	E: Send + Sync + 'static,
 	P: Send + 'static,
-	V: View<O, E, P> + 'static,
-	V::Completion: Into<CliCompletion>,
+	V: View<O, E, P, Completion = ()> + 'static,
 	V::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 	F: Fn(CliViewContext) -> Result<V, Failure> + Send + Sync + 'static,
 	A: Fn(InputFields) -> Result<I, CliError> + Send + Sync + 'static,
@@ -80,77 +79,42 @@ where
 
 		let cli = cli.clone();
 		let factory = factory.clone();
+		let projection = projection.clone();
 		let prepare_view = move |context: CliViewContext,
+		                         json: bool,
 		                         cancellation: Cancellation,
 		                         renderer: DiagnosticRenderer| {
-			prepare_cli_execution(
+			if json {
+				return Ok(execution::prepare_json(
+					cli,
+					input,
+					projection,
+					context,
+					cancellation,
+					renderer,
+				));
+			}
+
+			let stderr = context.stderr.clone();
+			let view = factory(context).map_err(InvocationError::Setup)?;
+			let view = ErasedView::new(projection.human(view));
+			Ok(execution::prepare_human(
 				cli,
 				input,
-				&*factory,
-				context,
+				view,
+				stderr,
 				cancellation,
 				renderer,
 				binding.capacity,
-			)
+			))
 		};
 
 		Ok(Parsed::Input(PreparedCli {
 			prepare: Box::new(prepare_view),
+			json: false,
 			renderer: Default::default(),
 		}))
 	});
 
 	Ok(CliRegistration { commands, prepare })
-}
-
-/// Construct the view before handing the host an executable invocation.
-fn prepare_cli_execution<I, O, E, P, V>(
-	cli: Arc<Cli<I, O, E, P>>,
-	input: I,
-	factory: &impl Fn(CliViewContext) -> Result<V, Failure>,
-	context: CliViewContext,
-	cancellation: Cancellation,
-	renderer: DiagnosticRenderer,
-	capacity: Option<NonZeroUsize>,
-) -> Result<PreparedCliExecution, InvocationError>
-where
-	I: Send + 'static,
-	O: Send + Sync + 'static,
-	E: Send + Sync + 'static,
-	P: Send + 'static,
-	V: View<O, E, P> + 'static,
-	V::Completion: Into<CliCompletion>,
-	V::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-{
-	let stderr = context.stderr.clone();
-	let view = factory(context).map_err(InvocationError::Setup)?;
-	let view = ErasedView::<O, E, P, CliCompletion>::new(view);
-
-	Ok(PreparedCliExecution {
-		cancellation: cancellation.clone(),
-		run: Box::new(move || {
-			let report = view::run(&cli.action, input, view, capacity, cancellation);
-			let mut report = DispatchReport::from_report(report);
-			deliver_cli_diagnostic(&mut report, &renderer, &stderr);
-			report
-		}),
-	})
-}
-
-fn deliver_cli_diagnostic(
-	report: &mut DispatchReport,
-	renderer: &DiagnosticRenderer,
-	stderr: &Output,
-) {
-	let Some(diagnostic) = Diagnostic::from_report(report) else {
-		return;
-	};
-
-	let write = |text: &str| {
-		stderr
-			.write_all(format!("{text}\n").as_bytes())
-			.map_err(|error| Failure::new(FailureKind::OutputFailed, error))
-	};
-
-	report.diagnostics = diagnostics::deliver(&diagnostic, renderer, write, write);
 }

@@ -6,7 +6,7 @@ use crate::{
 	cli::{CliError, Parsed},
 	diagnostics::DiagnosticRenderer,
 };
-use clap::{Command, error::ErrorKind};
+use clap::{Arg, ArgAction, Command, error::ErrorKind};
 use std::{
 	collections::{BTreeMap, BTreeSet},
 	ffi::OsString,
@@ -34,6 +34,8 @@ impl CliRoutes {
 		let Some(cli) = cli else {
 			return Ok(Vec::new());
 		};
+
+		Self::validate_json_option(&cli)?;
 
 		let mut routes = Vec::new();
 		for command in cli.commands {
@@ -66,6 +68,20 @@ impl CliRoutes {
 		Ok(routes)
 	}
 
+	fn validate_json_option(cli: &CliRegistration) -> Result<(), RegistrationError> {
+		let has_collision = cli.commands.iter().any(|command| {
+			command
+				.get_arguments()
+				.any(|argument| argument.get_long() == Some("json"))
+		});
+		if has_collision {
+			return Err(RegistrationError(
+				"--json is reserved for CLI JSON presentation".into(),
+			));
+		}
+		Ok(())
+	}
+
 	pub(super) fn publish(&mut self, routes: Vec<(Vec<String>, CliRoute)>) {
 		self.routes.extend(routes);
 	}
@@ -78,7 +94,7 @@ impl CliRoutes {
 		renderer: DiagnosticRenderer,
 	) -> Result<Parsed<PreparedCli>, CliError> {
 		let arguments: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
-		let command = self.command_tree(program, &[]).version(version.to_owned());
+		let command = self.command(program, version);
 		let matches = match command.try_get_matches_from(arguments.clone()) {
 			Ok(matches) => matches,
 			Err(error)
@@ -92,6 +108,7 @@ impl CliRoutes {
 			Err(error) => return Err(CliError(error.to_string())),
 		};
 
+		let json = matches.get_flag("trine:json");
 		let mut path = Vec::new();
 		let mut cursor = &matches;
 		while let Some((name, matches)) = cursor.subcommand() {
@@ -104,6 +121,7 @@ impl CliRoutes {
 			.get(&path)
 			.ok_or_else(|| CliError("choose an action".into()))?;
 
+		let arguments = crate::cli::output_mode::without_json(arguments);
 		let normalized = [OsString::from(program), OsString::from(&route.original)]
 			.into_iter()
 			.chain(arguments.into_iter().skip(path.len() + 1))
@@ -112,10 +130,23 @@ impl CliRoutes {
 		(route.prepare)(normalized).map(|parsed| match parsed {
 			Parsed::Input(mut prepared) => {
 				prepared.renderer = renderer;
+				prepared.json = json;
 				Parsed::Input(prepared)
 			}
 			Parsed::Display(text) => Parsed::Display(text),
 		})
+	}
+
+	pub(super) fn command(&self, program: &str, version: &str) -> Command {
+		let command = self.command_tree(program, &[]).version(version.to_owned());
+
+		command.arg(
+			Arg::new("trine:json")
+				.long("json")
+				.global(true)
+				.action(ArgAction::SetTrue)
+				.help("Print one structured JSON result"),
+		)
 	}
 
 	fn command_tree(&self, program: &str, prefix: &[String]) -> Command {

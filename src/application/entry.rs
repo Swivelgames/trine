@@ -49,29 +49,68 @@ impl<I, O, E, P> Entry<I, O, E, P> {
 impl<I: Send + 'static, O: Send + Sync + 'static, E: Send + Sync + 'static, P: Send + 'static>
 	Entry<I, O, E, P>
 {
-	pub fn cli<V, F>(self, binding: CliBinding, factory: F) -> Self
+	/// Register human and JSON presentation with one action-owned exit policy.
+	///
+	/// Human views render output; they cannot supply a second completion policy.
+	///
+	/// ```compile_fail
+	/// use trine::{Entry, application::CliBinding, view::View, error::Failure};
+	/// fn register<V>(entry: Entry<(), (), (), ()>, binding: CliBinding)
+	/// where V: View<(), (), (), Completion = u8, Error = Failure> + 'static {
+	///     entry.cli(binding, |_| -> Result<V, Failure> { unreachable!() }, |_| 0);
+	/// }
+	/// ```
+	///
+	/// Output and domain errors must support the standard JSON presentation.
+	///
+	/// ```compile_fail
+	/// use trine::{Entry, application::CliBinding, view::View, error::Failure};
+	/// struct NotSerializable;
+	/// fn register<V>(entry: Entry<(), NotSerializable, (), ()>, binding: CliBinding)
+	/// where V: View<NotSerializable, (), (), Completion = (), Error = Failure> + 'static {
+	///     entry.cli(binding, |_| -> Result<V, Failure> { unreachable!() }, |_| 0);
+	/// }
+	/// ```
+	pub fn cli<V, F>(
+		self,
+		binding: CliBinding,
+		factory: F,
+		exit: impl Fn(&Result<O, E>) -> u8 + Send + Sync + 'static,
+	) -> Self
 	where
 		I: DeserializeOwned,
-		V: View<O, E, P> + 'static,
-		V::Completion: Into<super::CliCompletion>,
+		O: serde::Serialize,
+		E: serde::Serialize,
+		V: View<O, E, P, Completion = ()> + 'static,
 		V::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 		F: Fn(CliViewContext) -> Result<V, Failure> + Send + Sync + 'static,
 	{
-		self.cli_with_input(binding, InputFields::deserialize, factory)
+		self.cli_with_input(binding, InputFields::deserialize, factory, exit)
 	}
 
-	pub fn cli_with_input<V, F, A>(mut self, binding: CliBinding, assemble: A, factory: F) -> Self
+	/// JSON presentation also supports explicit native input assembly.
+	pub fn cli_with_input<V, F, A>(
+		mut self,
+		binding: CliBinding,
+		assemble: A,
+		factory: F,
+		exit: impl Fn(&Result<O, E>) -> u8 + Send + Sync + 'static,
+	) -> Self
 	where
-		V: View<O, E, P> + 'static,
-		V::Completion: Into<super::CliCompletion>,
+		O: serde::Serialize,
+		E: serde::Serialize,
+		V: View<O, E, P, Completion = ()> + 'static,
 		V::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 		F: Fn(CliViewContext) -> Result<V, Failure> + Send + Sync + 'static,
 		A: Fn(InputFields) -> Result<I, CliError> + Send + Sync + 'static,
 	{
 		self.duplicate |= self.cli.is_some();
 		let action = self.action.clone();
+		let projection = super::json::JsonProjection::new(exit);
 		self.cli = Some(Box::new(move |program, version| {
-			build_cli_registration(program, version, action, binding, assemble, factory)
+			build_cli_registration(
+				program, version, action, binding, assemble, factory, projection,
+			)
 		}));
 		self
 	}

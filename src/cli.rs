@@ -4,7 +4,9 @@
 //! explicit: the schema supplies types, not pluralization or command design.
 
 mod bindings;
+pub mod completion;
 mod input;
+pub mod output_mode;
 mod parser;
 mod schema;
 

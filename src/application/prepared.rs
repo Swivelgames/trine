@@ -5,6 +5,7 @@ use crate::{Cancellation, registry::DispatchReport, structured::Transcript};
 
 pub(super) type PrepareCliView = dyn FnOnce(
 		CliViewContext,
+		bool,
 		Cancellation,
 		crate::diagnostics::DiagnosticRenderer,
 	) -> Result<PreparedCliExecution, InvocationError>
@@ -13,6 +14,7 @@ pub(super) type PrepareCliView = dyn FnOnce(
 /// Parsed CLI input. Call prepare to construct its view before execution.
 pub struct PreparedCli {
 	pub(super) prepare: Box<PrepareCliView>,
+	pub(super) json: bool,
 	pub(super) renderer: crate::diagnostics::DiagnosticRenderer,
 }
 
@@ -30,7 +32,7 @@ impl PreparedCli {
 		context: CliViewContext,
 		cancellation: Cancellation,
 	) -> Result<PreparedCliExecution, InvocationError> {
-		(self.prepare)(context, cancellation, self.renderer)
+		(self.prepare)(context, self.json, cancellation, self.renderer)
 	}
 }
 

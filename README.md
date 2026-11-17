@@ -227,7 +227,7 @@ The experimental authoring shape is:
 let mut app = Application::new("workyard", env!("CARGO_PKG_VERSION"))?;
 app.register(
 	Entry::new(create_action)
-		.cli(create_binding, |context| Ok(CreateCliView::new(context)))
+		.cli(create_binding, |context| Ok(CreateCliView::new(context)), create_exit_code)
 		.rpc(StructuredBinding::serde())
 		.mcp(StructuredBinding::custom(CreateMcpView::new)),
 )?;
@@ -257,7 +257,8 @@ Standard `StructuredBinding::serde()` views require serializable outcomes/errors
 but no event serialization. They default to terminal-only presentation.
 `serde_with_progress(mapper, capacity)` adds explicit event mapping; an invocation
 must also set `observe = true`. Custom views opt into progress with `.observe(capacity)`.
-CLI-only registrations need no output/error/event serialization. All view factories
+CLI registrations require serializable output and domain errors, but progress needs no
+serialization. RPC registration remains independent. All view factories
 are fallible and fresh per invocation; custom view errors retain classified causes in
 the erased report, while the domain outcome remains typed and available through
 `DispatchReport::typed::<Output, DomainError, Failure>()`.
@@ -310,17 +311,17 @@ single-executor cancellation under bounded queue pressure.
 ### View completion and host diagnostics
 
 Every `View` now declares `type Completion`, and `finish` returns that value.
-Use `()` to retain the default exit policy, or return `CliCompletion::exit(code)`
-from a CLI view. Shared CLI assembly accepts either through `Into<CliCompletion>`;
-custom structured views return unit. Lower-level runners retain arbitrary completion
-types. Reports use `PresentationState::Completed(value)`, `Failed(error)` or
+Entry CLI human views return `()`; their registration supplies the shared exit
+policy for human and JSON presentation. Custom structured views also return unit.
+Lower-level runners retain arbitrary completion types, including `CliCompletion`.
+Reports use `PresentationState::Completed(value)`, `Failed(error)` or
 `Skipped`. Skipped means abnormal execution supplied no domain result for finish;
 accepted progress may already have been presented.
 
 `DispatchReport::exit_code()` honors CLI completion unless execution or presentation
 failed, which always selects a nonzero exit. Unit completion defaults to zero for
 a returned Ok and one for a returned Err. The shared create simulation returns
-cancellation as a normal typed outcome but its CLI view selects exit one:
+cancellation as a normal typed outcome but its registered exit policy selects exit one:
 
 ```json
 {"status":"cancelled","task":"feat/payments","completed":["api"],"remaining":["web"]}
@@ -437,3 +438,43 @@ invocations do not subscribe to confirmation requests and return `None` immediat
 Before presenting a confirmation, the CLI view driver completes delivery of progress
 already accepted by the invocation. Applications can disclose facts once through
 progress and ask a short question without repeating those facts inside the prompt.
+
+## Direct CLI JSON and shell completions
+
+`Entry::cli(binding, human_factory, exit_policy)` always supports `--json`. Its
+output and domain-error types must implement `Serialize`. The typed
+exit-policy callback receives `&Result<Output, Error>` and returns a `u8`; it is
+shared by human and JSON presentations. Human views return `()` and focus on
+rendering. Use `cli_with_input` when custom native input assembly is needed.
+
+JSON mode does not construct the human view. It disables progress and interactive
+confirmation, retains the action's typed result, and writes one four-space-indented
+JSON document after execution settles:
+
+```json
+{
+    "exit_code": 0,
+    "result": { "message": "Hello" },
+    "error": null
+}
+```
+
+Domain errors and cancellation remain in `result`. The `error` field is reserved
+for failures of parsing, execution or presentation, with stable `code` and readable
+`message` fields. A framework failure can accompany an available result. Results
+are encoded before writing; a failing stdout produces a nonzero exit and a stderr
+diagnostic rather than a second JSON document. RPC envelopes are unchanged.
+
+Hosts can use `cli::output_mode::json_requested` and
+`application::json::JsonResponse::failure` to render errors that occur before a
+prepared invocation exists. The mode detector respects `--` and does not interpret
+`--option=--json` values as flags. Explicit help/version remain ordinary displays.
+`--json` is reserved for every Entry CLI action; conflicting action bindings are
+rejected during registration. Progress types do not require serialization.
+
+`Application::cli_command()` returns the registered Clap command tree, including
+aliases, namespaces and JSON support. Hosts may add their own commands to that
+projection and call `cli::completion::generate(&mut command, shell)`. Generation
+returns script bytes without writing files or modifying shell configuration.
+Native-path bindings supply filesystem completion hints. Dynamic domain suggestions
+are a separate follow-up capability.
