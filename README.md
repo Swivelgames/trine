@@ -489,8 +489,14 @@ Repeated-group child options become suggestions only after a complete anchor val
 before the cursor, using the declared binding relationship rather than flag prefixes.
 This advisory filtering does not change action parsing or validate repository paths.
 
-`Context::option` distinguishes absent, supplied and ambiguous options, including
-placement flags after the cursor. An empty provider result never enables file fallback.
+Construct raw input with `Context::new(arguments, index, cwd)`. Before invoking
+providers, Trine derives partial input once from bindings and alias assignments.
+During callbacks, `Context::field` and `Context::option` distinguish absent,
+incomplete, supplied and ambiguous values, including arguments after the cursor.
+`Context::groups` exposes explicitly supplied rows and `Context::current_group`
+selects the row whose anchor precedes the cursor. `Group::field` preserves native
+values and per-row ambiguity. No action input is admitted or deserialized here.
+An empty provider result never enables file fallback.
 
 Hosts check `completion::requested()` before normal parsing, then call
 `completion::respond(command, arguments, cwd)`. Completion failures should return

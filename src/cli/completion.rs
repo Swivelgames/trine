@@ -1,15 +1,17 @@
 //! Dynamic completion from the same command tree used for ordinary parsing.
 mod bash_input;
 mod context;
-mod eligibility;
+mod input;
 mod provider;
+mod scan;
 mod shell;
 
 use clap::Command;
 pub use clap_complete::Shell;
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 pub use context::{Context, OptionValue};
-pub(crate) use eligibility::GroupChild;
+pub use input::Group;
+pub(crate) use input::{Field, GroupField};
 pub(crate) use provider::Provider;
 use std::{ffi::OsString, io, path::Path, sync::Arc};
 
@@ -22,19 +24,26 @@ pub fn complete(command: Command, context: Context) -> io::Result<Vec<OsString>>
 }
 
 fn candidates(
-	command: Command,
-	context: Context,
+	mut command: Command,
+	mut context: Context,
 	group_domains_first: bool,
 ) -> io::Result<Vec<CompletionCandidate>> {
 	if context.index >= context.arguments.len() {
 		return Ok(Vec::new());
 	}
 
+	command.build();
+	context.input = Some(scan::read(&command, &context));
+	let excluded = context
+		.input
+		.as_ref()
+		.expect("just parsed")
+		.excluded
+		.clone();
 	let context = Arc::new(context);
 	let mut groups = Vec::new();
 	let mut command = prepare(command, &context, &mut groups);
 	command.build();
-	let excluded = eligibility::excluded(&command, &context);
 	let mut candidates = clap_complete::engine::complete(
 		&mut command,
 		context.arguments.clone(),

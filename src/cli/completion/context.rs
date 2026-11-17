@@ -7,55 +7,57 @@ pub struct Context {
 	pub arguments: Vec<OsString>,
 	pub index: usize,
 	pub cwd: PathBuf,
+	pub(super) input: Option<super::input::Input>,
 }
 
 /// A placement option may be absent, complete, or unsafe to infer from partial input.
 pub enum OptionValue<'a> {
 	Absent,
+	Incomplete,
 	Present(&'a std::ffi::OsStr),
 	Ambiguous,
 }
 
 impl Context {
-	/// Inspect a named option without decoding native values or validating action input.
-	/// Duplicate options, missing values and values under the cursor are ambiguous.
-	pub fn option(&self, long: &str) -> OptionValue<'_> {
-		use clap_lex::OsStrExt;
-
-		let flag = format!("--{long}");
-		let prefix = format!("{flag}=");
-
-		let mut found = None;
-		let mut arguments = self.arguments.iter().enumerate().skip(1);
-
-		while let Some((index, argument)) = arguments.next() {
-			if argument == "--" {
-				break;
-			}
-
-			let value = if argument == flag.as_str() {
-				let Some((value_index, value)) = arguments.next() else {
-					return OptionValue::Ambiguous;
-				};
-
-				if value_index == self.index || value.starts_with("-") {
-					return OptionValue::Ambiguous;
-				}
-
-				Some(value.as_os_str())
-			} else {
-				argument.strip_prefix(&prefix)
-			};
-
-			if let Some(value) = value {
-				if found.is_some() || index == self.index || value.is_empty() {
-					return OptionValue::Ambiguous;
-				}
-
-				found = Some(value);
-			}
+	pub fn new(arguments: Vec<OsString>, index: usize, cwd: PathBuf) -> Self {
+		Self {
+			arguments,
+			index,
+			cwd,
+			input: None,
 		}
+	}
 
-		found.map_or(OptionValue::Absent, OptionValue::Present)
+	/// A scalar field, including alias assignments and complete arguments after the cursor.
+	pub fn field(&self, name: &str) -> OptionValue<'_> {
+		self.input
+			.as_ref()
+			.map_or(OptionValue::Absent, |input| input.field(name))
+	}
+
+	/// All explicitly supplied rows; unavailable role context is distinct from no rows.
+	pub fn groups(&self, name: &str) -> Option<&[super::Group]> {
+		let input = self.input.as_ref().filter(|input| input.valid)?;
+		input.groups.get(name).map(Vec::as_slice)
+	}
+
+	/// The row whose anchor precedes the cursor, never a later repository's row.
+	pub fn current_group(&self, name: &str) -> Option<&super::Group> {
+		self.groups(name)?
+			.iter()
+			.rev()
+			.find(|row| row.anchor_index < self.index)
+	}
+
+	/// Inspect a bound long option during a provider callback, using parsed field roles.
+	pub fn option(&self, long: &str) -> OptionValue<'_> {
+		let Some(input) = &self.input else {
+			return OptionValue::Absent;
+		};
+
+		input
+			.options
+			.get(long)
+			.map_or(OptionValue::Absent, |field| input.field(field))
 	}
 }

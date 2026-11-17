@@ -50,14 +50,20 @@ pub(super) fn build_command(
 		if let Some(provider) = bindings.completions.get(&binding.field) {
 			argument = argument.add(provider.clone());
 		}
-		if let Some((group, anchor)) = &bindings.group {
-			let anchor = format!("{group}[].{anchor}");
-			if binding.field.starts_with(&format!("{group}[].")) && binding.field != anchor {
-				argument = argument.add(super::completion::GroupChild {
-					anchor: argument_id(&anchor),
-				});
-			}
-		}
+		let group = bindings.group.as_ref().and_then(|(group, anchor)| {
+			let child = binding.field.strip_prefix(&format!("{group}[]."))?;
+			Some(super::completion::GroupField {
+				name: group.clone(),
+				child: child.into(),
+				anchor: child == anchor,
+			})
+		});
+		argument = argument.add(super::completion::Field {
+			name: binding.field.clone(),
+			group,
+			repeated: fields[&binding.field] == Scalar::StringList,
+			assigned: None,
+		});
 
 		command = command.arg(argument);
 	}

@@ -392,11 +392,11 @@ fn completion_projection_preserves_native_hints_and_namespace_flags() {
 	assert_eq!(path.get_value_hint(), clap::ValueHint::AnyPath);
 	let candidates = trine::cli::completion::complete(
 		command.clone(),
-		trine::cli::completion::Context {
-			arguments: ["demo", "task", ""].map(Into::into).to_vec(),
-			index: 2,
-			cwd: std::env::current_dir().unwrap(),
-		},
+		trine::cli::completion::Context::new(
+			["demo", "task", ""].map(Into::into).to_vec(),
+			2,
+			std::env::current_dir().unwrap(),
+		),
 	)
 	.unwrap();
 	assert!(candidates.contains(&"checkout".into()));

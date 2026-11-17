@@ -115,9 +115,5 @@ fn request(shell: Shell, arguments: Vec<OsString>, cwd: &Path) -> io::Result<Con
 		arguments.push(OsString::new());
 	}
 
-	Ok(Context {
-		arguments,
-		index,
-		cwd: cwd.to_owned(),
-	})
+	Ok(Context::new(arguments, index, cwd.to_owned()))
 }

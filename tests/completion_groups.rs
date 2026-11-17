@@ -97,11 +97,7 @@ fn children_require_an_anchor_value_before_the_cursor_not_matching_text() {
 			let index = arguments.len();
 			arguments.push("--la".into());
 			arguments.extend(after.iter().map(OsString::from));
-			let context = Context {
-				arguments,
-				index,
-				cwd: std::env::current_dir().unwrap(),
-			};
+			let context = Context::new(arguments, index, std::env::current_dir().unwrap());
 
 			let candidates = completion::complete(app.cli_command(), context).unwrap();
 			assert_eq!(
@@ -116,11 +112,11 @@ fn children_require_an_anchor_value_before_the_cursor_not_matching_text() {
 #[test]
 fn the_anchor_remains_available_and_parsing_is_unchanged() {
 	let app = application();
-	let context = Context {
-		arguments: ["demo", "task", "amend", ""].map(Into::into).to_vec(),
-		index: 3,
-		cwd: std::env::current_dir().unwrap(),
-	};
+	let context = Context::new(
+		["demo", "task", "amend", ""].map(Into::into).to_vec(),
+		3,
+		std::env::current_dir().unwrap(),
+	);
 
 	let candidates = completion::complete(app.cli_command(), context).unwrap();
 	assert!(candidates.contains(&OsString::from("fix/one")));

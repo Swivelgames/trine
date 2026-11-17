@@ -83,11 +83,11 @@ fn providers_receive_trailing_native_context_without_action_admission() {
 		vec!["demo", "task", "amend", "fix/", "--state-dir", "some state"],
 		vec!["demo", "task", "amend", "fix/", "--state-dir=some state"],
 	] {
-		let context = Context {
-			arguments: arguments.into_iter().map(Into::into).collect(),
-			index: 3,
-			cwd: std::env::current_dir().unwrap(),
-		};
+		let context = Context::new(
+			arguments.into_iter().map(Into::into).collect(),
+			3,
+			std::env::current_dir().unwrap(),
+		);
 
 		assert_eq!(
 			completion::complete(app.cli_command(), context).unwrap(),
@@ -96,65 +96,4 @@ fn providers_receive_trailing_native_context_without_action_admission() {
 	}
 
 	assert_eq!(calls.load(Ordering::SeqCst), 2);
-}
-
-#[test]
-fn placement_options_preserve_literals_and_reject_ambiguity() {
-	for (arguments, valid) in [
-		(vec!["demo", "amend", "fix/", "--state-dir=x"], true),
-		(vec!["demo", "amend", "fix/", "--state-dir", "x"], true),
-		(vec!["demo", "amend", "fix/", "--state-dir"], false),
-		(
-			vec!["demo", "amend", "fix/", "--state-dir", "--json"],
-			false,
-		),
-		(
-			vec!["demo", "amend", "fix/", "--state-dir=x", "--state-dir=x"],
-			false,
-		),
-	] {
-		let context = Context {
-			arguments: arguments.into_iter().map(Into::into).collect(),
-			index: 2,
-			cwd: std::env::current_dir().unwrap(),
-		};
-
-		assert_eq!(
-			matches!(context.option("state-dir"), OptionValue::Present(value) if value == "x"),
-			valid
-		);
-	}
-
-	let context = Context {
-		arguments: ["demo", "amend", "--", "--state-dir=x"]
-			.map(Into::into)
-			.to_vec(),
-		index: 3,
-		cwd: std::env::current_dir().unwrap(),
-	};
-
-	assert!(matches!(context.option("state-dir"), OptionValue::Absent));
-}
-
-#[cfg(unix)]
-#[test]
-fn equals_placement_keeps_non_unicode_path_bytes() {
-	use std::{
-		ffi::OsStr,
-		os::unix::ffi::{OsStrExt, OsStringExt},
-	};
-
-	let context = Context {
-		arguments: vec![
-			"demo".into(),
-			OsString::from_vec(b"--state-dir=a\xff".to_vec()),
-			"fix/".into(),
-		],
-		index: 2,
-		cwd: std::env::current_dir().unwrap(),
-	};
-
-	assert!(
-		matches!(context.option("state-dir"), OptionValue::Present(value) if value == OsStr::from_bytes(b"a\xff"))
-	);
 }

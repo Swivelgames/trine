@@ -45,11 +45,7 @@ pub(super) fn context(line: &OsStr, point: usize, cwd: &Path) -> Option<Context>
 		arguments.insert(index, OsString::new());
 	}
 
-	Some(Context {
-		arguments,
-		index,
-		cwd: cwd.to_owned(),
-	})
+	Some(Context::new(arguments, index, cwd.to_owned()))
 }
 
 /// Quote state is private shell transport metadata, not domain input.

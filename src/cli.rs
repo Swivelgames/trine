@@ -98,7 +98,30 @@ impl<Input, Output, Error, Event> Cli<Input, Output, Error, Event> {
 		let action_command = build_command(action.name(), action.description(), &bindings, &fields);
 		command = command.subcommand(action_command.clone());
 		for alias in &aliases {
-			command = command.subcommand(action_command.clone().name(alias.name.clone()));
+			let alias_command =
+				action_command
+					.clone()
+					.name(alias.name.clone())
+					.mut_args(|argument| {
+						let Some(mut field) = argument.get::<completion::Field>().cloned() else {
+							return argument;
+						};
+						if let Some((_, value)) = alias
+							.assignments
+							.iter()
+							.find(|(name, _)| name == &field.name)
+						{
+							field.assigned = Some(
+								value
+									.as_str()
+									.map(str::to_owned)
+									.unwrap_or_else(|| value.to_string())
+									.into(),
+							);
+						}
+						argument.add(field)
+					});
+			command = command.subcommand(alias_command);
 		}
 
 		let commands = command.get_subcommands().cloned().collect();
