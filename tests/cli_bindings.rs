@@ -165,7 +165,7 @@ fn missing_values_and_required_fields_are_errors() {
 	let cli = workyard::cli(workyard::action(Duration::ZERO));
 	for (arguments, expected) in [
 		(vec!["demo", "create", "feature", "--repo"], "--repo"),
-		(vec!["demo", "create", "--repo=api"], "task"),
+		(vec!["demo", "create", "--repo=api"], "<TASK>"),
 		(vec!["demo", "create", "feature"], "repositories"),
 	] {
 		assert!(cli.parse(arguments).unwrap_err().0.contains(expected));

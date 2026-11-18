@@ -21,6 +21,8 @@ pub struct Bindings {
 	pub(super) fields: Vec<Binding>,
 	pub(super) group: Option<(String, String)>,
 	pub(super) native_paths: BTreeSet<String>,
+	pub(super) positional_alternative: Option<(String, String)>,
+	pub(super) examples: Option<String>,
 	pub(super) completions: BTreeMap<String, super::completion::Provider>,
 }
 
@@ -65,6 +67,17 @@ impl Bindings {
 		self
 	}
 
+	/// Also accept a named scalar option as the command's single positional.
+	pub fn positional_alternative(mut self, field: &str, value_name: &str) -> Self {
+		self.positional_alternative = Some((field.into(), value_name.into()));
+		self
+	}
+
+	pub fn examples(mut self, text: &str) -> Self {
+		self.examples = Some(text.into());
+		self
+	}
+
 	pub fn positional(mut self, field: impl Into<String>) -> Self {
 		self.fields.push(Binding {
 			field: field.into(),
@@ -102,6 +115,7 @@ impl Bindings {
 #[derive(Clone, Debug)]
 pub struct Alias {
 	pub(super) name: String,
+	pub(super) description: Option<String>,
 	pub(super) assignments: Vec<(String, Value)>,
 }
 
@@ -109,8 +123,14 @@ impl Alias {
 	pub fn new(name: impl Into<String>) -> Self {
 		Self {
 			name: name.into(),
+			description: None,
 			assignments: Vec::new(),
 		}
+	}
+
+	pub fn description(mut self, text: &str) -> Self {
+		self.description = Some(text.into());
+		self
 	}
 
 	pub fn set(mut self, field: impl Into<String>, value: impl Into<Value>) -> Self {
@@ -184,6 +204,16 @@ pub(super) fn validate_bindings(
 				)));
 			}
 		}
+	}
+
+	if let Some((field, _)) = &bindings.positional_alternative
+		&& (positionals != 0
+			|| !matches!(fields.get(field), Some(Scalar::String | Scalar::NativePath))
+			|| field.contains("[]."))
+	{
+		return Err(RegistrationError(format!(
+			"invalid positional alternative for '{field}'"
+		)));
 	}
 
 	for field in fields.keys() {
