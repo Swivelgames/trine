@@ -420,7 +420,7 @@ not require one file per type, a fixed directory depth or additional crates. For
 example, the outbox's small queue and state helpers remain beside the outbox they
 support, and schema helpers remain together as one cohesive translation concern.
 
-### Optional terminal confirmations
+### Terminal confirmations and choices
 
 Enable `cli-confirmation` to use `CliViewContext::confirm` from a CLI view's
 `confirm` callback. The helper uses Inquire with only its Crossterm backend enabled,
@@ -435,7 +435,15 @@ runs on the joined presentation worker: external token cancellation does not wak
 an active terminal read automatically. No reader thread is abandoned. Structured
 invocations do not subscribe to confirmation requests and return `None` immediately.
 
-Before presenting a confirmation, the CLI view driver completes delivery of progress
+For a menu, call `InvocationContext::select` with a `Selection` containing a
+message and ordered option labels. A CLI view can delegate its `select` callback
+to `CliViewContext::select` under the same Cargo feature. The answer is the
+zero-based index of the chosen label. Include a Cancel item when the action
+offers cancellation. Esc, Ctrl+C, and input EOF cancel the terminal selection.
+A view without selection support returns `None`. Actions can use their typed
+outcome to report any decision an unattended caller still needs to make.
+
+Before presenting either prompt, the CLI view driver completes delivery of progress
 already accepted by the invocation. Applications can disclose facts once through
 progress and ask a short question without repeating those facts inside the prompt.
 

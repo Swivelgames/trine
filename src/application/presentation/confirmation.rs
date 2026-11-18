@@ -1,12 +1,8 @@
 //! Optional terminal confirmation on the joined presentation worker.
-use super::CliViewContext;
+use super::{CliViewContext, prompt};
 use crate::{Cancellation, invocation::Confirmation};
-use inquire::{
-	Confirm,
-	error::InquireError,
-	ui::{RenderConfig, Styled},
-};
-use std::io::{self, IsTerminal};
+use inquire::{Confirm, error::InquireError};
+use std::io;
 
 impl CliViewContext {
 	/// Prompt only when both input and the presentation stream are terminals.
@@ -22,20 +18,13 @@ impl CliViewContext {
 		if cancellation.is_cancelled() {
 			return Ok(Some(false));
 		}
-		if !self.stderr.is_terminal() || !io::stdin().is_terminal() || !io::stderr().is_terminal() {
+		if !self.can_prompt() {
 			return Ok(None);
 		}
 
-		// Inquire adds one separator space after each prefix: three plain spaces
-		// yield a four-space inset without its default question/answer ornaments.
-		let mut render = RenderConfig::empty();
-		render.prompt_prefix = Styled::new("   ");
-		render.answered_prompt_prefix = Styled::new("   ");
-		render.error_message.prefix = Styled::new("   ");
-		render.canceled_prompt_indicator = Styled::new("cancelled");
 		let answer = Confirm::new(&request.message)
 			.with_default(false)
-			.with_render_config(render)
+			.with_render_config(prompt::style())
 			.prompt();
 		map_answer(answer, cancellation)
 	}

@@ -2,6 +2,10 @@
 
 #[cfg(feature = "cli-confirmation")]
 mod confirmation;
+#[cfg(feature = "cli-confirmation")]
+mod prompt;
+#[cfg(feature = "cli-confirmation")]
+mod selection;
 
 use std::{
 	io::{self, IsTerminal, Write},

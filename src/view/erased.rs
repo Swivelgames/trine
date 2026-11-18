@@ -14,6 +14,12 @@ trait DynView<O, E, P, C>: Send {
 		cancellation: crate::Cancellation,
 	) -> ViewFuture<'_, Option<bool>>;
 
+	fn select(
+		&mut self,
+		request: crate::invocation::Selection,
+		cancellation: crate::Cancellation,
+	) -> ViewFuture<'_, Option<usize>>;
+
 	fn finish<'a>(&'a mut self, outcome: &'a Result<O, E>) -> ViewFuture<'a, C>;
 }
 
@@ -33,6 +39,19 @@ where
 		Box::pin(async move {
 			self.0
 				.confirm(request, cancellation)
+				.await
+				.map_err(|e| Failure::from_box(FailureKind::OutputFailed, e.into()))
+		})
+	}
+
+	fn select(
+		&mut self,
+		request: crate::invocation::Selection,
+		cancellation: crate::Cancellation,
+	) -> ViewFuture<'_, Option<usize>> {
+		Box::pin(async move {
+			self.0
+				.select(request, cancellation)
 				.await
 				.map_err(|e| Failure::from_box(FailureKind::OutputFailed, e.into()))
 		})
@@ -80,6 +99,14 @@ impl<O: Sync, E: Sync, P: Send + 'static, C: Send> View<O, E, P> for ErasedView<
 		cancellation: crate::Cancellation,
 	) -> Result<Option<bool>, Failure> {
 		self.0.confirm(request, cancellation).await
+	}
+
+	async fn select(
+		&mut self,
+		request: crate::invocation::Selection,
+		cancellation: crate::Cancellation,
+	) -> Result<Option<usize>, Failure> {
+		self.0.select(request, cancellation).await
 	}
 
 	async fn progress(&mut self, event: P) -> Result<(), Failure> {

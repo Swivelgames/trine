@@ -22,6 +22,14 @@ impl<O: Sync, E: Sync, P: Send, V: View<O, E, P, Completion = ()>> View<O, E, P>
 		self.view.confirm(request, cancellation).await
 	}
 
+	async fn select(
+		&mut self,
+		request: crate::invocation::Selection,
+		cancellation: Cancellation,
+	) -> Result<Option<usize>, Self::Error> {
+		self.view.select(request, cancellation).await
+	}
+
 	async fn progress(&mut self, event: P) -> Result<(), Self::Error> {
 		self.view.progress(event).await
 	}

@@ -1,8 +1,8 @@
 //! Invocation-scoped cooperative cancellation and optional bounded progress.
 
-mod confirmation;
-pub use confirmation::Confirmation;
-pub(crate) use confirmation::{Request, Requests};
+mod decision;
+pub use decision::{Confirmation, Selection};
+pub(crate) use decision::{Request, Requests};
 
 use std::{fmt, num::NonZeroUsize};
 
@@ -69,7 +69,7 @@ impl std::error::Error for EmitError {}
 pub struct InvocationContext<Event> {
 	cancellation: Cancellation,
 	events: Option<Sender<Event>>,
-	confirmations: Option<Sender<Request>>,
+	decisions: Option<Sender<Request>>,
 }
 
 impl<Event> Clone for InvocationContext<Event> {
@@ -77,7 +77,7 @@ impl<Event> Clone for InvocationContext<Event> {
 		Self {
 			cancellation: self.cancellation.clone(),
 			events: self.events.clone(),
-			confirmations: self.confirmations.clone(),
+			decisions: self.decisions.clone(),
 		}
 	}
 }
@@ -87,7 +87,7 @@ impl<Event> InvocationContext<Event> {
 		Self {
 			cancellation,
 			events: None,
-			confirmations: None,
+			decisions: None,
 		}
 	}
 
@@ -97,24 +97,42 @@ impl<Event> InvocationContext<Event> {
 			Self {
 				cancellation,
 				events: Some(events),
-				confirmations: None,
+				decisions: None,
 			},
 			receiver,
 		)
 	}
 
-	pub(crate) fn with_confirmations(mut self) -> (Self, Requests) {
+	pub(crate) fn with_decisions(mut self) -> (Self, Requests) {
 		let (sender, receiver) = async_channel::bounded(1);
-		self.confirmations = Some(sender);
+		self.decisions = Some(sender);
 		(self, receiver)
 	}
 
 	/// Ask the selected view. Unsubscribed interfaces return None immediately.
 	pub async fn confirm(&self, confirmation: Confirmation) -> Result<Option<bool>, EmitError> {
-		let Some(requests) = &self.confirmations else {
+		let Some(requests) = &self.decisions else {
 			return Ok(None);
 		};
-		confirmation::ask(requests, confirmation, &self.cancellation).await
+		decision::ask(
+			requests,
+			|reply| Request::Confirm(confirmation, reply),
+			&self.cancellation,
+		)
+		.await
+	}
+
+	/// Ask the selected view for a zero-based option. A noninteractive view returns None.
+	pub async fn select(&self, selection: Selection) -> Result<Option<usize>, EmitError> {
+		let Some(requests) = &self.decisions else {
+			return Ok(None);
+		};
+		decision::ask(
+			requests,
+			|reply| Request::Select(selection, reply),
+			&self.cancellation,
+		)
+		.await
 	}
 
 	pub fn cancellation(&self) -> &Cancellation {
@@ -144,8 +162,8 @@ impl<Event> InvocationContext<Event> {
 	/// Stop accepting events; already accepted events remain available to drain.
 	/// Action completion calls this even if a handler retains a context clone.
 	pub fn close_events(&self) {
-		if let Some(confirmations) = &self.confirmations {
-			confirmations.close();
+		if let Some(decisions) = &self.decisions {
+			decisions.close();
 		}
 		if let Some(events) = &self.events {
 			events.close();

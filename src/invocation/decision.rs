@@ -9,24 +9,28 @@ pub struct Confirmation {
 	pub message: String,
 }
 
-#[derive(Debug)]
-pub(crate) struct Request {
-	pub confirmation: Confirmation,
-	pub response: Sender<Option<bool>>,
+/// Select one of the supplied labels. The returned index refers to this order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Selection {
+	pub message: String,
+	pub options: Vec<String>,
 }
 
-pub(crate) async fn ask(
+#[derive(Debug)]
+pub(crate) enum Request {
+	Confirm(Confirmation, Sender<Option<bool>>),
+	Select(Selection, Sender<Option<usize>>),
+}
+
+pub(crate) async fn ask<T>(
 	requests: &Sender<Request>,
-	confirmation: Confirmation,
+	make_request: impl FnOnce(Sender<Option<T>>) -> Request,
 	cancellation: &Cancellation,
-) -> Result<Option<bool>, EmitError> {
+) -> Result<Option<T>, EmitError> {
 	let (response, answer) = async_channel::bounded(1);
 	let exchange = async {
 		requests
-			.send(Request {
-				confirmation,
-				response,
-			})
+			.send(make_request(response))
 			.await
 			.map_err(|_| EmitError::Closed)?;
 		answer.recv().await.map_err(|_| EmitError::Closed)
