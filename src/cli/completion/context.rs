@@ -35,6 +35,13 @@ impl Context {
 			.map_or(OptionValue::Absent, |input| input.field(name))
 	}
 
+	/// Completed occurrences of a list field in argument order, excluding the word
+	/// being edited. A known empty list and unavailable context are distinct.
+	pub fn values(&self, name: &str) -> Option<&[OsString]> {
+		let input = self.input.as_ref().filter(|input| input.valid)?;
+		input.lists.get(name).map(Vec::as_slice)
+	}
+
 	/// All explicitly supplied rows; unavailable role context is distinct from no rows.
 	pub fn groups(&self, name: &str) -> Option<&[super::Group]> {
 		let input = self.input.as_ref().filter(|input| input.valid)?;

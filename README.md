@@ -94,8 +94,11 @@ schema subset and all explicit bindings before constructing Clap commands:
 - At most one repeated object group; its child properties use the same scalar
 	subset. `Bindings::group("repositories", "path", "repo")` declares the anchor.
 	`Bindings::option("repositories[].remote", "repo-remote")` declares an override.
-- At most one string positional. Other properties have explicit long-option
-	spellings. Every property must be bound exactly once.
+- Declare positional fields in argument order. Required fields come first.
+	The final positional can accept a list of strings or native paths. For
+	example, `.positional("task").positional("projects").native_path("projects")`
+	binds a task followed by a `Vec<NativePath>`. A list bound to a long option
+	accepts one value per occurrence. Bind each property once.
 - Aliases invoke the same action and can assign root scalar values. Duplicate or
 	reserved command names, duplicate options and incompatible assignments fail
 	during registration.
@@ -501,7 +504,8 @@ Construct raw input with `Context::new(arguments, index, cwd)`. Before invoking
 providers, Trine derives partial input once from bindings and alias assignments.
 During callbacks, `Context::field` and `Context::option` distinguish absent,
 incomplete, supplied and ambiguous values, including arguments after the cursor.
-`Context::groups` exposes explicitly supplied rows and `Context::current_group`
+`Context::values` returns the completed items of a list in argument order,
+excluding the word being edited. `Context::groups` exposes explicitly supplied rows and `Context::current_group`
 selects the row whose anchor precedes the cursor. `Group::field` preserves native
 values and per-row ambiguity. No action input is admitted or deserialized here.
 An empty provider result never enables file fallback.

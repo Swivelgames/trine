@@ -80,7 +80,7 @@ fn omitted_repeated_option_preserves_serde_default_and_missing_value_fails() {
 }
 
 #[test]
-fn arrays_reject_scalar_alias_assignments_and_positional_bindings() {
+fn arrays_reject_scalar_alias_assignments_and_must_be_the_last_positional() {
 	assert!(
 		Cli::new(
 			"demo",
@@ -93,8 +93,8 @@ fn arrays_reject_scalar_alias_assignments_and_positional_bindings() {
 	);
 
 	let positional = Bindings::new()
-		.option("task", "task")
 		.positional("accept_pull")
+		.positional("task")
 		.group("repositories", "path", "repo")
 		.option("repositories[].name", "repo-name");
 	assert!(Cli::new("demo", "1", action(), positional, vec![]).is_err());

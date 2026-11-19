@@ -73,7 +73,7 @@ pub(super) fn build_command(
 			Scalar::String | Scalar::StringList => argument
 				.num_args(1)
 				.value_parser(clap::builder::StringValueParser::new()),
-			Scalar::NativePath => argument
+			Scalar::NativePath | Scalar::NativePathList => argument
 				.value_hint(clap::ValueHint::AnyPath)
 				.num_args(1)
 				.value_parser(clap::builder::OsStringValueParser::new()),
@@ -98,7 +98,7 @@ pub(super) fn build_command(
 		argument = argument.add(super::completion::Field {
 			name: binding.field.clone(),
 			group,
-			repeated: fields[&binding.field] == Scalar::StringList,
+			repeated: fields[&binding.field].repeated(),
 			assigned: None,
 		});
 
@@ -106,7 +106,12 @@ pub(super) fn build_command(
 			let required = schema["required"]
 				.as_array()
 				.is_some_and(|names| names.iter().any(|name| name == &binding.field));
-			argument = argument.action(ArgAction::Set).required(required);
+			argument = argument.required(required);
+			if fields[&binding.field].repeated() {
+				argument = argument.num_args(1..);
+			} else {
+				argument = argument.action(ArgAction::Set);
+			}
 		}
 		if let Some((field, name)) = &bindings.positional_alternative
 			&& field == &binding.field
@@ -192,17 +197,21 @@ fn collect_occurrences<'a>(
 				.cloned()
 				.map(FieldValue::RepeatedString)
 				.collect(),
-			Scalar::NativePath => matches
+			scalar @ (Scalar::NativePath | Scalar::NativePathList) => matches
 				.get_many::<OsString>(&id)
 				.into_iter()
 				.flatten()
 				.cloned()
 				.map(|path| {
-					NativePath::new(path)
-						.map(FieldValue::Path)
-						.map_err(|error| CliError(format!("{}: {error}", label(binding))))
+					let path = NativePath::new(path)
+						.map_err(|error| CliError(format!("{}: {error}", label(binding))))?;
+					Ok(if scalar.repeated() {
+						FieldValue::RepeatedPath(path)
+					} else {
+						FieldValue::Path(path)
+					})
 				})
-				.collect::<Result<Vec<_>, _>>()?,
+				.collect::<Result<Vec<_>, CliError>>()?,
 			Scalar::Boolean => matches
 				.get_many::<bool>(&id)
 				.into_iter()
@@ -280,31 +289,34 @@ fn insert(
 	value: FieldValue,
 	binding: &Binding,
 ) -> Result<(), CliError> {
-	if let FieldValue::RepeatedString(value) = value {
-		let values = object
-			.scalars
-			.entry(field.to_owned())
-			.or_insert_with(|| Value::Array(Vec::new()));
-		values
-			.as_array_mut()
-			.expect("validated string array binding")
-			.push(Value::String(value));
-		return Ok(());
-	}
-
-	if object.scalars.contains_key(field) || object.paths.contains_key(field) {
-		return Err(CliError(format!(
-			"{} was supplied more than once for '{}'",
-			label(binding),
-			binding.field
-		)));
-	}
-
 	match value {
+		FieldValue::RepeatedString(value) => {
+			let values = object
+				.scalars
+				.entry(field.to_owned())
+				.or_insert_with(|| Value::Array(Vec::new()));
+			values
+				.as_array_mut()
+				.expect("validated string list")
+				.push(Value::String(value));
+		}
+		FieldValue::RepeatedPath(path) => {
+			object
+				.path_lists
+				.entry(field.to_owned())
+				.or_default()
+				.push(path);
+		}
+		_ if object.scalars.contains_key(field) || object.paths.contains_key(field) => {
+			return Err(CliError(format!(
+				"{} was supplied more than once for '{}'",
+				label(binding),
+				binding.field
+			)));
+		}
 		FieldValue::Scalar(value) => {
 			object.scalars.insert(field.to_owned(), value);
 		}
-		FieldValue::RepeatedString(_) => unreachable!("handled string array above"),
 		FieldValue::Path(path) => {
 			object.paths.insert(field.to_owned(), path);
 		}

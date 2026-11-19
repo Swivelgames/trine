@@ -12,6 +12,7 @@ pub(super) fn read(command: &Command, context: &Context) -> Input {
 	let mut input = enter(command);
 	let mut pending: Option<(&Arg, usize)> = None;
 	let mut escaped = false;
+	let mut positional_index = 1;
 
 	for (index, word) in context.arguments.iter().enumerate().skip(1) {
 		if let Some((argument, start)) = pending.take() {
@@ -51,16 +52,31 @@ pub(super) fn read(command: &Command, context: &Context) -> Input {
 		{
 			command = next;
 			input = enter(command);
+			positional_index = 1;
 			continue;
 		}
 
-		if let Some(positional) = command.get_positionals().next() {
-			record(
-				&mut input,
-				positional,
-				index,
-				supplied(word, index == context.index),
-			);
+		let Some(positional) = command
+			.get_positionals()
+			.find(|arg| arg.get_index() == Some(positional_index))
+		else {
+			if index != context.index {
+				input.valid = false;
+			}
+			continue;
+		};
+
+		record(
+			&mut input,
+			positional,
+			index,
+			supplied(word, index == context.index),
+		);
+		if positional
+			.get_num_args()
+			.is_none_or(|arity| arity.max_values() <= 1)
+		{
+			positional_index += 1;
 		}
 	}
 
@@ -149,6 +165,9 @@ fn enter(command: &Command) -> Input {
 		if let Some(long) = argument.get_long() {
 			input.options.insert(long.into(), field.name.clone());
 		}
+		if field.repeated {
+			input.lists.insert(field.name.clone(), Vec::new());
+		}
 		if let Some(group) = &field.group {
 			input.groups.entry(group.name.clone()).or_default();
 		}
@@ -177,6 +196,20 @@ fn record(input: &mut Input, argument: &Arg, index: usize, value: Value) {
 		return;
 	};
 
+	if field.repeated {
+		match &value {
+			Value::Present(word) => input
+				.lists
+				.get_mut(&field.name)
+				.expect("registered list")
+				.push(word.clone()),
+			Value::Incomplete => {}
+			Value::Ambiguous => input.valid = false,
+		}
+		input.fields.insert(field.name.clone(), value);
+		return;
+	}
+
 	let first_assignment = field.assigned.is_some() && input.explicit.insert(field.name.clone());
 	let (fields, name) = if let Some(group) = &field.group {
 		let rows = input.groups.entry(group.name.clone()).or_default();
@@ -200,7 +233,6 @@ fn record(input: &mut Input, argument: &Arg, index: usize, value: Value) {
 	let value = if let Some(existing) = fields.get(name) {
 		match (existing, &value) {
 			(Value::Present(old), Value::Present(new)) if first_assignment && old == new => value,
-			_ if field.repeated => value,
 			_ => Value::Ambiguous,
 		}
 	} else {

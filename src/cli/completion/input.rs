@@ -48,6 +48,7 @@ impl Group {
 pub(super) struct Input {
 	pub(super) fields: BTreeMap<String, Value>,
 	pub(super) groups: BTreeMap<String, Vec<Group>>,
+	pub(super) lists: BTreeMap<String, Vec<OsString>>,
 	pub(super) options: BTreeMap<String, String>,
 	pub(super) excluded: BTreeSet<String>,
 	pub(super) explicit: BTreeSet<String>,

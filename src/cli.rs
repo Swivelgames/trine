@@ -16,7 +16,7 @@ use clap::Command;
 use serde::de::DeserializeOwned;
 
 use crate::{Action, Cancellation, InvocationContext, RegistrationError, action::validate_name};
-use bindings::{validate_aliases, validate_bindings};
+use bindings::{validate_aliases, validate_bindings, validate_positionals};
 use parser::{build_command, parse};
 use schema::Shape;
 
@@ -105,6 +105,10 @@ impl<Input, Output, Error, Event> Cli<Input, Output, Error, Event> {
 		command = command.subcommand(action_command.clone());
 		for alias in &aliases {
 			command = command.subcommand(parser::alias_command(&action_command, alias));
+		}
+
+		for route in command.get_subcommands() {
+			validate_positionals(route)?;
 		}
 
 		let commands = command.get_subcommands().cloned().collect();

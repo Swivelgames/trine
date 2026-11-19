@@ -12,6 +12,7 @@ pub(super) enum InputValue {
 	Path(NativePath),
 	Object(InputFields),
 	Rows(Vec<InputFields>),
+	Paths(Vec<NativePath>),
 }
 
 impl<'de> Deserializer<'de> for InputValue {
@@ -21,7 +22,20 @@ impl<'de> Deserializer<'de> for InputValue {
 		match self {
 			Self::Scalar(value) => value.deserialize_any(visitor),
 			Self::Object(fields) => visitor.visit_map(Fields::new(fields)?),
-			Self::Rows(rows) => visitor.visit_seq(Rows(rows.into_iter().enumerate())),
+			Self::Rows(rows) => {
+				let values = rows.into_iter().map(Self::Object);
+				visitor.visit_seq(Elements {
+					label: "row",
+					values: values.enumerate(),
+				})
+			}
+			Self::Paths(paths) => {
+				let values = paths.into_iter().map(Self::Path);
+				visitor.visit_seq(Elements {
+					label: "path",
+					values: values.enumerate(),
+				})
+			}
 			Self::Path(_) => Err(de::Error::custom(
 				"expected NativePath for native CLI value; buffered Serde shapes such as \
 				#[serde(flatten)] cannot preserve native paths here. Use Cli::with_input \
@@ -91,12 +105,16 @@ impl Fields {
 			.paths
 			.into_iter()
 			.map(|(key, path)| (key, InputValue::Path(path)));
+		let lists = fields
+			.path_lists
+			.into_iter()
+			.map(|(key, paths)| (key, InputValue::Paths(paths)));
 		let groups = fields
 			.groups
 			.into_iter()
 			.map(|(key, rows)| (key, InputValue::Rows(rows)));
 
-		for (key, value) in native.chain(groups) {
+		for (key, value) in native.chain(lists).chain(groups) {
 			if values.contains_key(&key) {
 				return Err(de::Error::custom(format!(
 					"field `{key}` has multiple input representations"
@@ -137,21 +155,24 @@ impl<'de> MapAccess<'de> for Fields {
 	}
 }
 
-struct Rows(std::iter::Enumerate<std::vec::IntoIter<InputFields>>);
+struct Elements<I> {
+	label: &'static str,
+	values: std::iter::Enumerate<I>,
+}
 
-impl<'de> SeqAccess<'de> for Rows {
+impl<'de, I: Iterator<Item = InputValue>> SeqAccess<'de> for Elements<I> {
 	type Error = Error;
 
 	fn next_element_seed<T: DeserializeSeed<'de>>(
 		&mut self,
 		seed: T,
 	) -> Result<Option<T::Value>, Error> {
-		let Some((index, fields)) = self.0.next() else {
+		let Some((index, value)) = self.values.next() else {
 			return Ok(None);
 		};
 
-		seed.deserialize(InputValue::Object(fields))
+		seed.deserialize(value)
 			.map(Some)
-			.map_err(|error| de::Error::custom(format!("row [{index}]: {error}")))
+			.map_err(|error| de::Error::custom(format!("{} [{index}]: {error}", self.label)))
 	}
 }

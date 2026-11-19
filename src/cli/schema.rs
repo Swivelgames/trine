@@ -12,6 +12,17 @@ pub(super) enum Scalar {
 	StringList,
 	Boolean,
 	NativePath,
+	NativePathList,
+}
+
+impl Scalar {
+	pub fn native(self) -> bool {
+		matches!(self, Self::NativePath | Self::NativePathList)
+	}
+
+	pub fn repeated(self) -> bool {
+		matches!(self, Self::StringList | Self::NativePathList)
+	}
 }
 
 #[derive(Debug)]
@@ -42,13 +53,17 @@ impl Shape {
 
 			let item = resolve(root, &schema["items"], field)?;
 			if item["type"] != "object" {
-				if scalar(root, item, field)? != Scalar::String {
-					return Err(unsupported(
-						field,
-						"only string scalar arrays are supported",
-					));
-				}
-				scalars.insert(field.clone(), Scalar::StringList);
+				let list = match scalar(root, item, field)? {
+					Scalar::String => Scalar::StringList,
+					Scalar::NativePath => Scalar::NativePathList,
+					_ => {
+						return Err(unsupported(
+							field,
+							"expected an array of strings or native paths",
+						));
+					}
+				};
+				scalars.insert(field.clone(), list);
 				continue;
 			}
 

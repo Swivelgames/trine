@@ -12,12 +12,14 @@ pub(super) enum FieldValue {
 	Scalar(Value),
 	RepeatedString(String),
 	Path(NativePath),
+	RepeatedPath(NativePath),
 }
 
 #[derive(Debug, Default)]
 pub struct InputFields {
 	pub scalars: Map<String, Value>,
 	pub paths: BTreeMap<String, NativePath>,
+	pub path_lists: BTreeMap<String, Vec<NativePath>>,
 	pub groups: BTreeMap<String, Vec<InputFields>>,
 }
 

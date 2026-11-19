@@ -24,6 +24,8 @@ struct Repo {
 #[derive(Deserialize, Serialize, JsonSchema)]
 struct Input {
 	task: String,
+	#[serde(default)]
+	projects: Vec<NativePath>,
 	checkout: bool,
 	state: Option<NativePath>,
 	repos: Vec<Repo>,
@@ -56,6 +58,8 @@ fn observed(arguments: Vec<OsString>, index: usize, field: &str) -> Context {
 
 	let bindings = Bindings::new()
 		.positional("task")
+		.positional("projects")
+		.native_path("projects")
 		.option("checkout", "checkout")
 		.option("state", "state-dir")
 		.native_path("state")
@@ -230,5 +234,51 @@ fn grouped_and_scalar_paths_preserve_native_bytes() {
 	assert!(matches!(context.field("state"), OptionValue::Present(value) if value == path));
 	assert!(
 		matches!(context.current_group("repos").unwrap().field("path"), OptionValue::Present(value) if value == path)
+	);
+}
+
+#[test]
+fn a_variadic_provider_sees_completed_items_around_the_cursor_on_a_namespaced_alias() {
+	let args = [
+		"demo",
+		"task",
+		"checkout",
+		"feature",
+		"api",
+		"--repo=explicit",
+		"partial",
+		"--repo-from=main",
+		"web",
+	];
+	let context = observed(args.map(Into::into).to_vec(), 6, "projects");
+	assert_eq!(text(context.field("task")), Some("feature"));
+	assert_eq!(
+		context.values("projects").unwrap(),
+		["api", "web"].map(OsString::from)
+	);
+	assert_eq!(
+		text(context.current_group("repos").unwrap().field("path")),
+		Some("explicit")
+	);
+	assert_eq!(text(context.field("checkout")), Some("true"));
+}
+
+#[test]
+fn the_next_value_of_a_variadic_field_is_completed_after_several_items() {
+	let args = [
+		"demo",
+		"task",
+		"create",
+		"feature",
+		"api",
+		"--repo=explicit",
+		"infra",
+		"partial",
+	];
+	let context = observed(args.map(Into::into).to_vec(), 7, "projects");
+	assert_eq!(text(context.field("task")), Some("feature"));
+	assert_eq!(
+		context.values("projects").unwrap(),
+		["api", "infra"].map(OsString::from)
 	);
 }

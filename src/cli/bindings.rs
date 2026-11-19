@@ -15,7 +15,7 @@ pub(super) struct Binding {
 
 /// Explicit CLI spellings for every input field. Group child fields use
 /// `repositories[].remote` notation; exactly one group anchor starts each row.
-/// String array fields bind as repeatable options, preserving occurrence order.
+/// String and native path lists accept repeated options or a final variadic positional.
 #[derive(Clone, Debug, Default)]
 pub struct Bindings {
 	pub(super) fields: Vec<Binding>,
@@ -153,7 +153,7 @@ pub(super) fn validate_bindings(
 	}
 
 	for (field, scalar) in fields {
-		if (*scalar == Scalar::NativePath) != bindings.native_paths.contains(field) {
+		if scalar.native() != bindings.native_paths.contains(field) {
 			return Err(RegistrationError(format!(
 				"native-path binding must match native-path schema for '{field}'"
 			)));
@@ -169,7 +169,6 @@ pub(super) fn validate_bindings(
 
 	let mut bound = BTreeSet::new();
 	let mut options = BTreeSet::from(["help", "version"]);
-	let mut positionals = 0;
 
 	for binding in &bindings.fields {
 		let Some(scalar) = fields.get(&binding.field) else {
@@ -192,22 +191,16 @@ pub(super) fn validate_bindings(
 					"duplicate or reserved option '--{long}'"
 				)));
 			}
-		} else {
-			positionals += 1;
-			if !matches!(scalar, Scalar::String | Scalar::NativePath)
-				|| binding.field.contains("[].")
-				|| positionals > 1
-			{
-				return Err(RegistrationError(format!(
-					"'{}': this slice supports one scalar string positional",
-					binding.field
-				)));
-			}
+		} else if *scalar == Scalar::Boolean || binding.field.contains("[].") {
+			return Err(RegistrationError(format!(
+				"'{}' cannot be bound as a positional argument",
+				binding.field
+			)));
 		}
 	}
 
 	if let Some((field, _)) = &bindings.positional_alternative
-		&& (positionals != 0
+		&& (bindings.fields.iter().any(|binding| binding.long.is_none())
 			|| !matches!(fields.get(field), Some(Scalar::String | Scalar::NativePath))
 			|| field.contains("[]."))
 	{
@@ -239,6 +232,34 @@ pub(super) fn validate_bindings(
 			"repeated object group requires a matching string anchor binding".into(),
 		)),
 	}
+}
+
+/// Validate each projected route. In particular, alias assignments can change
+/// whether a positional is required, even when the underlying schema is shared.
+pub(super) fn validate_positionals(command: &clap::Command) -> Result<(), RegistrationError> {
+	let mut positionals = command.get_positionals().peekable();
+	while let Some(argument) = positionals.next() {
+		let Some(next) = positionals.peek() else {
+			break;
+		};
+
+		if argument
+			.get_num_args()
+			.is_some_and(|arity| arity.max_values() > 1)
+		{
+			return Err(RegistrationError(format!(
+				"variadic positional {argument} in '{}' must be last",
+				command.get_name()
+			)));
+		}
+		if !argument.is_required_set() && next.is_required_set() {
+			return Err(RegistrationError(format!(
+				"required positional {next} in '{}' follows an optional positional",
+				command.get_name()
+			)));
+		}
+	}
+	Ok(())
 }
 
 pub(super) fn validate_aliases(
@@ -274,7 +295,7 @@ pub(super) fn validate_aliases(
 			let valid = match shape.scalars.get(field) {
 				Some(Scalar::String) => value.is_string(),
 				Some(Scalar::Boolean) => value.is_boolean(),
-				Some(Scalar::NativePath | Scalar::StringList) | None => false,
+				_ => false,
 			};
 			if !valid {
 				return Err(RegistrationError(format!(
