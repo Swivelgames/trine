@@ -2,30 +2,7 @@
 
 use serde_json::{Value, json};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub(crate) enum Id {
-	String(String),
-	Integer(String),
-}
-
-impl Id {
-	pub fn parse(value: &Value, limit: usize) -> Option<Self> {
-		match value {
-			Value::String(value) if value.len() <= limit => Some(Self::String(value.clone())),
-			Value::Number(value) if value.is_i64() || value.is_u64() => {
-				Some(Self::Integer(value.to_string()))
-			}
-			_ => None,
-		}
-	}
-
-	pub fn value(&self) -> Value {
-		match self {
-			Self::String(value) => Value::String(value.clone()),
-			Self::Integer(value) => serde_json::from_str(value).expect("validated integer"),
-		}
-	}
-}
+pub(crate) use crate::jsonrpc::Id;
 
 pub(crate) enum Request {
 	Invoke {

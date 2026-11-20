@@ -10,5 +10,5 @@ pub use binding::StructuredBinding;
 pub use context::StructuredContext;
 pub use payload::{Payload, Transcript};
 
-pub(crate) use context::{LiveSink, SendFuture};
+pub(crate) use context::{Destination, LiveSink, ProgressSink, SendFuture};
 pub(crate) use guarded_view::GuardedView;

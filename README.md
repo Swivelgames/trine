@@ -2,7 +2,8 @@
 
 Trine is an experimental, unpublished Rust library for sharing typed actions
 between interfaces. It provides direct async invocation, a schema-assisted CLI,
-typed registry entries, independent views and native-path inputs. A live stdio RPC host is available; MCP remains an in-process harness.
+typed registry entries, independent views and native-path inputs. Applications can
+serve their registered actions over stdio using either RPC or MCP.
 
 An action owns its input, output, domain error and progress types. The CLI owns
 argument parsing, runtime startup and presentation. Trine does not know about Git,
@@ -149,8 +150,8 @@ python3 tests/smoke_registry.py
 inherited `CARGO_TARGET_DIR` overrides that configuration; the development
 commands above explicitly select this checkout. The smoke harness also sets its
 checkout-local target directory. Action APIs are experimental. This is one library
-crate with typed actions, registry dispatch, and views. Generated builders,
-MCP transport and publication are deferred. Normal dependencies use Smol
+crate with typed actions, registry dispatch, and views. Generated builders and
+publication are deferred. Normal dependencies use Smol
 and narrow Clap features, with no Tokio, HTTP or OAuth stack. The signal-handling
 crate is example/test-only.
 
@@ -219,7 +220,7 @@ use direct native deserialization, even when their derived schema is accepted at
 registration. Parsing reports this limitation before invoking the handler. Use
 `Cli::with_input`, extract native fields with `InputFields::take_path`, and assemble
 the containing input explicitly. This limitation does not change the JSON wire codec.
-The structured codec is used by live RPC; MCP transport remains future work.
+RPC and MCP use the same structured native-path codec.
 
 ## Shared application catalog
 
@@ -254,7 +255,8 @@ servers. They decode JSON into the same action input and select their registered
 view. `StructuredContext` is an invocation-scoped content sink. `Payload::Success`
 and `Payload::DomainFailure` are internal presentation values, not RPC/MCP envelopes.
 These harness entrypoints perform no framing or remote interaction. Both synchronous
-conveniences drive the prepared async execution lifecycle; `rpc::serve` adds live transport.
+conveniences drive the prepared async execution lifecycle. Use `rpc::serve` or
+`mcp::serve` for live clients.
 
 Standard `StructuredBinding::serde()` views require serializable outcomes/errors,
 but no event serialization. They default to terminal-only presentation.
@@ -398,6 +400,58 @@ profile has no discovery, initialization, replay, acknowledgments or MCP server.
 Run `python3 tests/smoke_rpc.py` for real subprocess observations. Native runtime
 verification recorded for this slice is Linux x86_64; Windows/macOS/ARM64 require
 native execution before claiming equivalent platform evidence.
+
+## Live stdio MCP
+
+Expose a tool by attaching `.mcp(StructuredBinding::serde())` to its catalog
+entry. The client discovers the tool's registered description and derived input
+schema through `tools/list`. A catalog path such as `["projects", "list"]`
+appears as `projects.list`. The same typed action handles `tools/call` and
+its MCP view supplies the terminal payload.
+
+When a tool accepts a narrower request, use
+`.mcp_with_input(binding, description, assemble)?`. Trine advertises the input
+type received by `assemble`, decodes it and passes the assembled value to the
+same action. Apply `#[serde(deny_unknown_fields)]` to that type when other
+fields should produce an input error.
+
+```rust,ignore
+let (reader, writer) = trine::mcp::stdio::open()?;
+smol::block_on(trine::mcp::serve(&application, reader, writer, shutdown))?;
+```
+
+This host implements MCP revision `2025-11-25`. Clients send `initialize` and
+then `notifications/initialized` before tool discovery or invocation. Tool
+results include text content and, for object payloads, `structuredContent`.
+Domain failures use `isError: true` so an agent can inspect the result and act
+on it. A custom view that contradicts the action's success or failure produces a
+correlated presentation error (`-32603`).
+
+Closing stdin cancels active calls. The host waits for those calls to settle
+and finishes writing accepted replies to stdout. A host shutdown signal also
+interrupts a stalled output drain.
+
+Mark a read-only tool with `.mcp_observation()` on its entry. Each connection
+admits up to 16 active tools and limits mutations to 14, reserving room for
+observations. A call that exceeds its capacity receives error `-32000`.
+Slots become available when the action settles. Ping and cancellation use no
+tool slots.
+
+A tool can opt into live progress with `StructuredBinding::serde_with_progress`
+and a bounded event capacity. Map each event to a JSON string to supply the MCP
+`message`. Other event values advance the counter without a message. A client
+subscribes by adding a string or integer `_meta.progressToken` alongside the
+tool name and arguments. Each `notifications/progress` echoes the token and
+counts upwards from 1. Trine omits `total`. Token types are preserved and each
+active call needs its own token, which becomes available again on settlement.
+An invalid or already active token receives a correlated invalid-params error.
+
+The bounded writer preserves each call’s notification order ahead of its
+terminal response and reserves slots for replies. With a slow reader, progress
+waits for space while the host continues processing incoming requests. Client
+cancellation discards queued progress for the withdrawn call. A frame already
+being written can finish. Tokenless calls and terminal-only bindings run
+without event observation.
 
 ## Source organization
 

@@ -11,9 +11,18 @@ use std::{
 
 pub(crate) type SendFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Failure>> + Send + 'a>>;
 
-pub(crate) trait LiveSink: Send + Sync {
+pub(crate) trait ProgressSink: Send + Sync {
 	fn progress(&self, value: Value) -> SendFuture<'_>;
+}
 
+#[derive(Clone)]
+pub(crate) enum Destination {
+	Transcript,
+	Progress(Arc<dyn ProgressSink>),
+	Live(Arc<dyn LiveSink>),
+}
+
+pub(crate) trait LiveSink: ProgressSink {
 	fn terminal(&self, payload: Payload) -> SendFuture<'_>;
 }
 
@@ -40,7 +49,7 @@ impl Drop for CloseSink {
 pub struct StructuredContext {
 	state: Arc<Mutex<State>>,
 	observe: bool,
-	live: Option<Arc<dyn LiveSink>>,
+	destination: Destination,
 }
 
 impl StructuredContext {
@@ -48,22 +57,16 @@ impl StructuredContext {
 		CloseSink(self.clone())
 	}
 
-	pub(crate) fn new(observe: bool) -> Self {
+	pub(crate) fn new(observe: bool, destination: Destination) -> Self {
 		Self {
 			state: Arc::new(Mutex::new(State::default())),
 			observe,
-			live: None,
+			destination,
 		}
 	}
 
-	pub(crate) fn with_live(observe: bool, sink: Arc<dyn LiveSink>) -> Self {
-		let mut context = Self::new(observe);
-		context.live = Some(sink);
-		context
-	}
-
 	pub async fn progress(&self, value: Value) -> Result<(), Failure> {
-		{
+		let sink: &dyn ProgressSink = {
 			let mut state = self
 				.state
 				.lock()
@@ -76,17 +79,20 @@ impl StructuredContext {
 				return Ok(());
 			}
 
-			if self.live.is_none() {
-				state.transcript.progress.push(value);
-				return Ok(());
+			match &self.destination {
+				Destination::Live(sink) => sink.as_ref(),
+				Destination::Progress(sink) => sink.as_ref(),
+				Destination::Transcript => {
+					state.transcript.progress.push(value);
+					return Ok(());
+				}
 			}
-		}
-
-		self.live.as_ref().unwrap().progress(value).await
+		};
+		sink.progress(value).await
 	}
 
 	pub async fn terminal(&self, payload: Payload) -> Result<(), Failure> {
-		{
+		let sink = {
 			let mut state = self
 				.state
 				.lock()
@@ -108,14 +114,15 @@ impl StructuredContext {
 				return Err(error);
 			}
 
-			if self.live.is_none() {
+			let Destination::Live(sink) = &self.destination else {
 				state.transcript.terminal = Some(payload);
 				state.terminal = true;
 				return Ok(());
-			}
-		}
+			};
+			sink
+		};
 
-		self.live.as_ref().unwrap().terminal(payload).await?;
+		sink.terminal(payload).await?;
 		self.state
 			.lock()
 			.map_err(|_| "presentation lock poisoned")?

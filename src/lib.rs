@@ -11,6 +11,8 @@ pub mod diagnostics;
 pub mod error;
 pub mod execution;
 pub mod invocation;
+mod jsonrpc;
+pub mod mcp;
 pub mod native_path;
 pub mod registry;
 pub mod rpc;

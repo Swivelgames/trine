@@ -9,17 +9,19 @@ use crate::{
 	error::{Failure, FailureKind},
 	execution::{PreparedInvocation, PresentationFailure, PresentationState},
 	registry::DispatchReport,
-	structured::{GuardedView, LiveSink, StructuredBinding, StructuredContext},
+	structured::{Destination, GuardedView, StructuredBinding, StructuredContext},
 };
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 
-pub(super) fn structured_prepare<I, O, E, P>(
+pub(super) fn structured_prepare<T, I, O, E, P>(
 	action: Action<I, O, E, P>,
 	binding: StructuredBinding<O, E, P>,
+	assemble: impl Fn(T) -> I + Send + Sync + 'static,
 ) -> Arc<StructuredPrepare>
 where
-	I: DeserializeOwned + Send + 'static,
+	T: DeserializeOwned,
+	I: Send + 'static,
 	O: Send + Sync + 'static,
 	E: Send + Sync + 'static,
 	P: Send + 'static,
@@ -27,20 +29,18 @@ where
 	let factory = binding.factory;
 	let capacity = binding.capacity;
 	let prepare = Box::new(
-		move |live: Option<Arc<dyn LiveSink>>,
+		move |destination: Destination,
 		      value,
 		      observe,
 		      cancellation: Cancellation,
 		      renderer: DiagnosticRenderer| {
 			let input = serde_json::from_value(value)
+				.map(&assemble)
 				.map_err(|e| InvocationError::Input(Failure::new(FailureKind::InvalidInput, e)))?;
 
 			let capacity = capacity.filter(|_| observe);
-			let is_live = live.is_some();
-			let context = match live {
-				Some(sink) => StructuredContext::with_live(capacity.is_some(), sink),
-				None => StructuredContext::new(capacity.is_some()),
-			};
+			let retain_terminal = !matches!(destination, Destination::Live(_));
+			let context = StructuredContext::new(capacity.is_some(), destination);
 
 			let close = context.close_on_drop();
 			let view = factory(context.clone()).map_err(InvocationError::Setup)?;
@@ -68,7 +68,7 @@ where
 				}
 
 				let mut execution = DispatchReport::from_report(report);
-				if !is_live {
+				if retain_terminal {
 					deliver_structured_diagnostic(&mut execution, &renderer, &context);
 				}
 

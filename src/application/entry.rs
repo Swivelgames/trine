@@ -5,9 +5,9 @@ mod structured;
 
 pub use cli::CliBinding;
 
-use super::{CliBuild, CliViewContext, StructuredPrepare};
+use super::{CliBuild, CliViewContext, StructuredPrepare, ToolDescription};
 use crate::{
-	Action,
+	Action, RegistrationError,
 	cli::{CliError, InputFields},
 	error::Failure,
 	structured::StructuredBinding,
@@ -25,6 +25,8 @@ pub struct Entry<I, O, E, P> {
 	pub(super) cli: Option<Box<CliBuild>>,
 	pub(super) rpc: Option<Arc<StructuredPrepare>>,
 	pub(super) mcp: Option<Arc<StructuredPrepare>>,
+	pub(super) tool_description: Option<ToolDescription>,
+	pub(super) mcp_observation: bool,
 	pub(super) duplicate: bool,
 }
 
@@ -36,8 +38,16 @@ impl<I, O, E, P> Entry<I, O, E, P> {
 			cli: None,
 			rpc: None,
 			mcp: None,
+			tool_description: None,
+			mcp_observation: false,
 			duplicate: false,
 		}
+	}
+
+	/// Allow this read-only tool to use the MCP host's reserved observation capacity.
+	pub fn mcp_observation(mut self) -> Self {
+		self.mcp_observation = true;
+		self
 	}
 
 	pub fn namespace(mut self, segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -120,7 +130,11 @@ impl<I: Send + 'static, O: Send + Sync + 'static, E: Send + Sync + 'static, P: S
 		I: DeserializeOwned,
 	{
 		self.duplicate |= self.rpc.is_some();
-		self.rpc = Some(structured_prepare(self.action.clone(), binding));
+		self.rpc = Some(structured_prepare(
+			self.action.clone(),
+			binding,
+			std::convert::identity,
+		));
 		self
 	}
 
@@ -129,7 +143,33 @@ impl<I: Send + 'static, O: Send + Sync + 'static, E: Send + Sync + 'static, P: S
 		I: DeserializeOwned,
 	{
 		self.duplicate |= self.mcp.is_some();
-		self.mcp = Some(structured_prepare(self.action.clone(), binding));
+		self.mcp = Some(structured_prepare(
+			self.action.clone(),
+			binding,
+			std::convert::identity,
+		));
 		self
+	}
+
+	/// Publish a narrower MCP input and translate it into the shared action's input.
+	pub fn mcp_with_input<T>(
+		mut self,
+		binding: StructuredBinding<O, E, P>,
+		description: &str,
+		assemble: impl Fn(T) -> I + Send + Sync + 'static,
+	) -> Result<Self, RegistrationError>
+	where
+		T: DeserializeOwned + schemars::JsonSchema + 'static,
+	{
+		if description.trim().is_empty() {
+			return Err(RegistrationError("MCP tool requires a description".into()));
+		}
+		self.duplicate |= self.mcp.is_some();
+		self.tool_description = Some(ToolDescription {
+			description: description.to_owned(),
+			input_schema: schemars::schema_for!(T).to_value(),
+		});
+		self.mcp = Some(structured_prepare(self.action.clone(), binding, assemble));
+		Ok(self)
 	}
 }

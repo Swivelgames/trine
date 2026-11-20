@@ -18,6 +18,7 @@ use crate::{
 	Cancellation, RegistrationError,
 	action::validate_name,
 	cli::{CliError, Parsed},
+	structured::{Destination, LiveSink, ProgressSink},
 };
 use clap::Command;
 use routing::CliRoutes;
@@ -40,7 +41,7 @@ struct CliRegistration {
 
 type CliBuild = dyn FnOnce(&str, &str) -> Result<CliRegistration, RegistrationError>;
 type StructuredFactory = dyn Fn(
-		Option<Arc<dyn crate::structured::LiveSink>>,
+		Destination,
 		Value,
 		bool,
 		Cancellation,
@@ -60,11 +61,45 @@ pub struct ActionInfo {
 	pub input_schema: Value,
 }
 
+struct ToolDescription {
+	description: String,
+	input_schema: Value,
+}
+
+/// A catalog lookup supplies admission policy before constructing the tool's view.
+pub(crate) struct McpTool<'a> {
+	pub(crate) observation: bool,
+	binding: &'a StructuredPrepare,
+	renderer: &'a crate::diagnostics::DiagnosticRenderer,
+}
+
+impl McpTool<'_> {
+	pub(crate) fn prepare(
+		self,
+		input: Value,
+		cancellation: Cancellation,
+		progress: Option<Arc<impl ProgressSink + 'static>>,
+	) -> Result<PreparedStructured, InvocationError> {
+		let observe = progress.is_some();
+		let destination =
+			progress.map_or(Destination::Transcript, |sink| Destination::Progress(sink));
+		(self.binding.prepare)(
+			destination,
+			input,
+			observe,
+			cancellation,
+			self.renderer.clone(),
+		)
+	}
+}
+
 struct Registered {
 	info: ActionInfo,
+	tool_info: Option<ActionInfo>,
 	cli: bool,
 	rpc: Option<Arc<StructuredPrepare>>,
 	mcp: Option<Arc<StructuredPrepare>>,
+	mcp_observation: bool,
 }
 
 #[derive(Default)]
@@ -117,6 +152,10 @@ impl Application {
 		})
 	}
 
+	pub(crate) fn identity(&self) -> (&str, &str) {
+		(&self.program, &self.version)
+	}
+
 	pub fn diagnostic_renderer(
 		&mut self,
 		interface: Interface,
@@ -163,14 +202,21 @@ impl Application {
 			description: entry.action.description().into(),
 			input_schema: entry.action.input_schema().clone(),
 		};
+		let tool_info = entry.tool_description.map(|tool| ActionInfo {
+			path: path.clone(),
+			description: tool.description,
+			input_schema: tool.input_schema,
+		});
 
 		self.entries.insert(
 			path,
 			Registered {
 				info,
+				tool_info,
 				cli: !routes.is_empty(),
 				rpc: entry.rpc,
 				mcp: entry.mcp,
+				mcp_observation: entry.mcp_observation,
 			},
 		);
 		self.cli_routes.publish(routes);
@@ -181,15 +227,26 @@ impl Application {
 		self.diagnostics.rpc.clone()
 	}
 
+	pub(crate) fn mcp_tool(&self, path: &[String]) -> Option<McpTool<'_>> {
+		let entry = self.entries.get(path)?;
+		Some(McpTool {
+			binding: entry.mcp.as_deref()?,
+			observation: entry.mcp_observation,
+			renderer: &self.diagnostics.mcp,
+		})
+	}
+
 	pub fn discover(&self, interface: Interface) -> Vec<&ActionInfo> {
 		self.entries
 			.values()
-			.filter(|entry| match interface {
-				Interface::Cli => entry.cli,
-				Interface::Rpc => entry.rpc.is_some(),
-				Interface::Mcp => entry.mcp.is_some(),
+			.filter_map(|entry| match interface {
+				Interface::Cli if entry.cli => Some(&entry.info),
+				Interface::Rpc if entry.rpc.is_some() => Some(&entry.info),
+				Interface::Mcp if entry.mcp.is_some() => {
+					Some(entry.tool_info.as_ref().unwrap_or(&entry.info))
+				}
+				_ => None,
 			})
-			.map(|entry| &entry.info)
 			.collect()
 	}
 
@@ -237,7 +294,14 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<PreparedStructured, InvocationError> {
-		self.prepare_structured(Interface::Rpc, path, input, observe, cancellation)
+		self.prepare_structured(
+			Interface::Rpc,
+			path,
+			input,
+			observe,
+			cancellation,
+			Destination::Transcript,
+		)
 	}
 
 	pub fn prepare_mcp(
@@ -247,7 +311,14 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<PreparedStructured, InvocationError> {
-		self.prepare_structured(Interface::Mcp, path, input, observe, cancellation)
+		self.prepare_structured(
+			Interface::Mcp,
+			path,
+			input,
+			observe,
+			cancellation,
+			Destination::Transcript,
+		)
 	}
 
 	fn prepare_structured(
@@ -257,6 +328,7 @@ impl Application {
 		input: Value,
 		observe: bool,
 		cancellation: Cancellation,
+		destination: Destination,
 	) -> Result<PreparedStructured, InvocationError> {
 		let key: Vec<String> = path.iter().map(|s| (*s).into()).collect();
 		let entry = self.entries.get(&key).ok_or(InvocationError::Unavailable)?;
@@ -269,7 +341,7 @@ impl Application {
 		.ok_or(InvocationError::Unavailable)?;
 
 		(prepare.prepare)(
-			None,
+			destination,
 			input,
 			observe,
 			cancellation,
@@ -283,7 +355,7 @@ impl Application {
 		input: Value,
 		observe: bool,
 		cancellation: Cancellation,
-		sink: Arc<dyn crate::structured::LiveSink>,
+		sink: Arc<dyn LiveSink>,
 	) -> Result<PreparedStructured, InvocationError> {
 		let prepare = self
 			.entries
@@ -292,7 +364,7 @@ impl Application {
 			.ok_or(InvocationError::Unavailable)?;
 
 		(prepare.prepare)(
-			Some(sink),
+			Destination::Live(sink),
 			input,
 			observe,
 			cancellation,
@@ -308,7 +380,14 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<StructuredReport, InvocationError> {
-		let prepared = self.prepare_structured(interface, path, input, observe, cancellation)?;
+		let prepared = self.prepare_structured(
+			interface,
+			path,
+			input,
+			observe,
+			cancellation,
+			Destination::Transcript,
+		)?;
 		Ok(smol::block_on(prepared.run()))
 	}
 }

@@ -1,11 +1,11 @@
 //! Live, bounded JSON-RPC stdio profile over the shared action catalog.
 
-mod framing;
+use crate::jsonrpc::framing;
 mod host;
 mod outbox;
 mod protocol;
 mod sink;
-pub mod stdio;
+pub use crate::jsonrpc::stdio;
 
 pub use host::{HostReport, serve};
 

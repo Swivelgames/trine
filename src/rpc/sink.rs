@@ -9,7 +9,7 @@ use crate::{
 	Cancellation,
 	error::{Failure, FailureKind},
 	registry::DispatchReport,
-	structured::{LiveSink, Payload, SendFuture},
+	structured::{LiveSink, Payload, ProgressSink, SendFuture},
 };
 use serde_json::{Value, json};
 
@@ -114,7 +114,7 @@ impl Sink {
 	}
 }
 
-impl LiveSink for Sink {
+impl ProgressSink for Sink {
 	fn progress(&self, event: Value) -> SendFuture<'_> {
 		Box::pin(async move {
 			let mut delivery = self.delivery.lock().await;
@@ -156,7 +156,9 @@ impl LiveSink for Sink {
 			Ok(())
 		})
 	}
+}
 
+impl LiveSink for Sink {
 	fn terminal(&self, payload: Payload) -> SendFuture<'_> {
 		Box::pin(async move {
 			let value = match payload {
