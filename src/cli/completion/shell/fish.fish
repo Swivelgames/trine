@@ -11,6 +11,6 @@ function _trine_complete_@IDENTIFIER@
 	end
 
 	set words[$slot] "$current"
-	env TRINE_COMPLETE=fish _CLAP_COMPLETE_INDEX=$index '@PROGRAM@' -- $words 2>/dev/null
+	env TRINE_COMPLETE=fish TRINE_COMPLETE_METADATA=1 _CLAP_COMPLETE_INDEX=$index '@PROGRAM@' -- $words 2>/dev/null
 end
 complete --keep-order --exclusive --command '@PROGRAM@' --arguments '(_trine_complete_@IDENTIFIER@)'

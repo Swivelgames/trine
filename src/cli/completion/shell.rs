@@ -54,9 +54,10 @@ pub(super) fn respond(
 		})
 		.flatten();
 
-	let metadata = shell == Shell::Zsh && std::env::var_os("TRINE_COMPLETE_METADATA").is_some();
-	let candidates = super::candidates(command, context, metadata)?;
-	if metadata {
+	let metadata = std::env::var_os("TRINE_COMPLETE_METADATA").is_some();
+	let grouped = shell == Shell::Zsh && metadata;
+	let candidates = super::candidates(command, context, grouped)?;
+	if grouped {
 		return Ok(zsh::encode(&candidates));
 	}
 
@@ -69,6 +70,16 @@ pub(super) fn respond(
 				.get_value()
 				.to_str()
 				.filter(|value| !value.chars().any(char::is_control))?;
+
+			if metadata
+				&& matches!(shell, Shell::Fish | Shell::PowerShell)
+				&& let Some(description) = candidate.get_help()
+			{
+				let description = description.to_string();
+				if !description.is_empty() && !description.chars().any(char::is_control) {
+					return Some(format!("{value}\t{description}"));
+				}
+			}
 
 			Some(
 				value

@@ -57,6 +57,25 @@ impl Bindings {
 		self
 	}
 
+	/// Suggest insertion values with optional display text and a shared group heading.
+	pub fn complete_candidates(
+		mut self,
+		field: impl Into<String>,
+		group: Option<&str>,
+		suggest: impl Fn(
+			&super::completion::Context,
+			&std::ffi::OsStr,
+		) -> Vec<super::completion::Candidate>
+		+ Send
+		+ Sync
+		+ 'static,
+	) -> Self {
+		let mut provider = super::completion::Provider::candidates(suggest);
+		provider.group = group.map(str::to_owned);
+		self.completions.insert(field.into(), provider);
+		self
+	}
+
 	pub fn new() -> Self {
 		Self::default()
 	}

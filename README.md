@@ -548,7 +548,14 @@ value. They return candidate `OsString`s without constructing an action or view.
 Use `Bindings::complete_group("field", "Tasks", provider)` to give suggestions a
 semantic label. Zsh displays named domain groups before options and retains existing
 help descriptions. Its normal completion styles control formatting; absent a format
-style, headings remain visible. Candidate values are separate from display text.
+style, headings remain visible.
+
+For per-item descriptions, use `complete_candidates("field", Some("Tasks"), provider)`.
+Return `completion::Candidate::new(value).description(label)` for a described
+suggestion or `Candidate::new(value)` for a plain one. Pass `None` for an
+ungrouped field. Zsh and Fish can show the description in their menus, and
+PowerShell uses it as the tooltip. Bash receives the insertion value alone.
+Re-source the registration script to enable descriptions in Fish and PowerShell.
 
 Repeated-group child options become suggestions only after a complete anchor value
 before the cursor, using the declared binding relationship rather than flag prefixes.

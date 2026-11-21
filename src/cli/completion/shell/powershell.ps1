@@ -48,18 +48,24 @@ Register-ArgumentCompleter -Native -CommandName '@PROGRAM@' -ScriptBlock {
 	}
 
 	$previousShell = $env:TRINE_COMPLETE
+	$previousMetadata = $env:TRINE_COMPLETE_METADATA
 	$previousIndex = $env:_CLAP_COMPLETE_INDEX
 	try {
 		$env:TRINE_COMPLETE = 'powershell'
+		$env:TRINE_COMPLETE_METADATA = '1'
 		$env:_CLAP_COMPLETE_INDEX = [string]$index
 		$results = @(& '@PROGRAM@' -- @words 2>$null)
 	} finally {
 		$env:TRINE_COMPLETE = $previousShell
+		$env:TRINE_COMPLETE_METADATA = $previousMetadata
 		$env:_CLAP_COMPLETE_INDEX = $previousIndex
 	}
 	if ($results.Count -eq 0) { return '' }
-	foreach ($value in $results) {
+	foreach ($row in $results) {
+		$fields = $row -split "`t", 2
+		$value = $fields[0]
+		$tooltip = if ($fields.Count -gt 1) { $fields[1] } else { $value }
 		$quoted = "'" + $value.Replace("'", "''") + "'"
-		[System.Management.Automation.CompletionResult]::new($quoted, $value, 'ParameterValue', $value)
+		[System.Management.Automation.CompletionResult]::new($quoted, $value, 'ParameterValue', $tooltip)
 	}
 }

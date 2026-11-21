@@ -14,6 +14,7 @@ use clap_complete::engine::{
 pub use context::{Context, OptionValue};
 pub use input::Group;
 pub(crate) use input::{Field, GroupField};
+pub use provider::Candidate;
 pub(crate) use provider::Provider;
 use std::{ffi::OsString, io, path::Path, sync::Arc};
 
@@ -81,8 +82,10 @@ fn prepare(command: Command, context: &Arc<Context>, groups: &mut Vec<String>) -
 				provider
 					.suggest(&context, current)
 					.into_iter()
-					.map(|value| {
-						CompletionCandidate::new(value).tag(provider.group.clone().map(Into::into))
+					.map(|candidate| {
+						CompletionCandidate::new(candidate.value)
+							.help(candidate.description.map(Into::into))
+							.tag(provider.group.clone().map(Into::into))
 					})
 					.collect()
 			}))
