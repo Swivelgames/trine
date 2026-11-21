@@ -12,7 +12,7 @@ _trine_complete_@IDENTIFIER@() {
 		fi
 
 		[[ -z "$candidate" ]] && continue
-		[[ "$candidate" == */ ]] && directory=true
+		[[ "$candidate" == */ || ( @WINDOWS_PATHS@ == true && "$candidate" == *'\' ) ]] && directory=true
 
 		case "$quote" in
 			single) candidate=${candidate//\'/\'\\\'\'} ;;

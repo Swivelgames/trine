@@ -1,7 +1,13 @@
 #compdef @PROGRAM@
 _trine_complete_@IDENTIFIER@() {
 	local -a request=("${(@Q)words}")
-	request[CURRENT]="${(Q)PREFIX}"
+	# Zsh removes the surrounding quotes from PREFIX. Restore that context so
+	# unquoting retains literal backslashes inside a quoted filesystem path.
+	local current="$PREFIX" quote="$compstate[quote]"
+	if [[ "$quote" == "'" || "$quote" == '"' ]]; then
+		current="${quote}${PREFIX}${quote}"
+	fi
+	request[CURRENT]="${(Q)current}"
 
 	local group value help
 	local -a groups=() candidates=() descriptions=()
@@ -24,7 +30,7 @@ _trine_complete_@IDENTIFIER@() {
 			display="$value"
 			[[ -n "${descriptions[index]}" ]] && display+=" -- ${descriptions[index]}"
 
-			if [[ "$value" == */ ]]; then
+			if [[ "$value" == */ || ( @WINDOWS_PATHS@ == true && "$value" == *'\' ) ]]; then
 				directories+=("$value")
 				directory_displays+=("$display")
 			else

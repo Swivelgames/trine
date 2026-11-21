@@ -6,9 +6,11 @@ mod provider;
 mod scan;
 mod shell;
 
-use clap::Command;
+use clap::{Arg, Command};
 pub use clap_complete::Shell;
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
+use clap_complete::engine::{
+	ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter,
+};
 pub use context::{Context, OptionValue};
 pub use input::Group;
 pub(crate) use input::{Field, GroupField};
@@ -67,7 +69,7 @@ fn prepare(command: Command, context: &Arc<Context>, groups: &mut Vec<String>) -
 	command
 		.mut_args(|argument| {
 			let Some(provider) = argument.get::<Provider>().cloned() else {
-				return argument;
+				return default_path_completion(argument, context);
 			};
 
 			if let Some(group) = &provider.group {
@@ -86,6 +88,29 @@ fn prepare(command: Command, context: &Arc<Context>, groups: &mut Vec<String>) -
 			}))
 		})
 		.mut_subcommands(|command| prepare(command, context, groups))
+}
+
+fn default_path_completion(argument: Arg, context: &Arc<Context>) -> Arg {
+	if !context.slash_paths
+		|| argument.get_value_hint() != clap::ValueHint::AnyPath
+		|| argument.get::<Field>().is_none()
+		|| argument.get::<ArgValueCompleter>().is_some()
+	{
+		return argument;
+	}
+
+	let context = context.clone();
+	let paths = PathCompleter::any().current_dir(&context.cwd);
+	argument.add(ArgValueCompleter::new(move |current: &std::ffi::OsStr| {
+		paths
+			.complete(current)
+			.into_iter()
+			.map(|path| {
+				let value = context.filesystem_candidate(path.get_value().to_owned());
+				CompletionCandidate::new(value).hide(path.is_hide_set())
+			})
+			.collect()
+	}))
 }
 
 /// Whether this is a shell's private query, before ordinary argument validation.

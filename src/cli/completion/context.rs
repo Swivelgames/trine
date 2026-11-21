@@ -7,6 +7,7 @@ pub struct Context {
 	pub arguments: Vec<OsString>,
 	pub index: usize,
 	pub cwd: PathBuf,
+	pub(super) slash_paths: bool,
 	pub(super) input: Option<super::input::Input>,
 }
 
@@ -25,7 +26,24 @@ impl Context {
 			index,
 			cwd,
 			input: None,
+			slash_paths: false,
 		}
+	}
+
+	/// Format a filesystem suggestion for insertion. Domain values need no formatting.
+	pub fn filesystem_candidate(&self, value: OsString) -> OsString {
+		if !self.slash_paths {
+			return value;
+		}
+		let Some(text) = value.to_str() else {
+			return value;
+		};
+
+		// Verbatim and device paths need their native namespace and separators.
+		if text.starts_with(r"\\?\") || text.starts_with(r"\\.\") || !text.contains('\\') {
+			return value;
+		}
+		text.replace('\\', "/").into()
 	}
 
 	/// A scalar field, including alias assignments and complete arguments after the cursor.
@@ -66,5 +84,28 @@ impl Context {
 			.options
 			.get(long)
 			.map_or(OptionValue::Absent, |field| input.field(field))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn slash_style_preserves_windows_namespaces() {
+		let mut context = Context::new(Vec::new(), 0, PathBuf::new());
+		context.slash_paths = true;
+		for (native, expected) in [
+			(r"C:\dir\child", "C:/dir/child"),
+			(r"\\server\share\dir", "//server/share/dir"),
+			(r"\\?\C:\dir", r"\\?\C:\dir"),
+			(r"\\?\UNC\server\share", r"\\?\UNC\server\share"),
+			(r"\\.\pipe\name", r"\\.\pipe\name"),
+		] {
+			assert_eq!(
+				context.filesystem_candidate(native.into()),
+				OsString::from(expected)
+			);
+		}
 	}
 }

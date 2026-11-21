@@ -21,6 +21,10 @@ pub(super) fn registration(program: &str, shell: Shell) -> Vec<u8> {
 	template
 		.replace("@PROGRAM@", program)
 		.replace("@IDENTIFIER@", &program.replace('-', "_"))
+		.replace(
+			"@WINDOWS_PATHS@",
+			if cfg!(windows) { "true" } else { "false" },
+		)
 		.into_bytes()
 }
 
@@ -33,7 +37,8 @@ pub(super) fn respond(
 		.ok()
 		.and_then(|value| value.parse().ok())
 		.ok_or_else(|| io::Error::other("invalid completion shell"))?;
-	let context = request(shell, arguments, cwd)?;
+	let mut context = request(shell, arguments, cwd)?;
+	context.slash_paths = cfg!(windows) && matches!(shell, Shell::Bash | Shell::Zsh | Shell::Fish);
 
 	// Readline replaces only the word after '=' or ':'; the engine completes the
 	// whole logical value. Remove exactly the prefix Readline will retain.
