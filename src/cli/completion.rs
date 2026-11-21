@@ -123,7 +123,18 @@ pub fn requested() -> bool {
 
 /// Reply to an installed completion script. Errors are intentionally quiet at the host.
 pub fn respond(command: Command, arguments: Vec<OsString>, cwd: &Path) -> io::Result<Vec<u8>> {
-	shell::respond(command, arguments, cwd)
+	respond_with(arguments, cwd, |_, _| command)
+}
+
+/// Select the command tree after shell decoding and before argument matching.
+/// Words include the executable at index zero. The cursor indexes the word being
+/// edited, which contains its prefix up to the cursor; later words remain available.
+pub fn respond_with(
+	arguments: Vec<OsString>,
+	cwd: &Path,
+	select_command: impl FnOnce(&[OsString], usize) -> Command,
+) -> io::Result<Vec<u8>> {
+	shell::respond(arguments, cwd, select_command)
 }
 
 /// Generate registration only; shell configuration is never changed.

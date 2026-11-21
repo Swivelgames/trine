@@ -561,6 +561,11 @@ Repeated-group child options become suggestions only after a complete anchor val
 before the cursor, using the declared binding relationship rather than flag prefixes.
 This advisory filtering does not change action parsing or validate repository paths.
 
+Hosts with shorthand syntax can use `completion::respond_with(arguments, cwd, select_command)`.
+The callback receives the decoded native words and cursor word index and returns a Clap
+command tree. For example, a completed shorthand path can select the same options as an
+explicit path-check command. Hosts with a fixed tree can use `completion::respond`.
+
 Construct raw input with `Context::new(arguments, index, cwd)`. Before invoking
 providers, Trine derives partial input once from bindings and alias assignments.
 During callbacks, `Context::field` and `Context::option` distinguish absent,

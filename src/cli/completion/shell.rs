@@ -29,9 +29,9 @@ pub(super) fn registration(program: &str, shell: Shell) -> Vec<u8> {
 }
 
 pub(super) fn respond(
-	command: Command,
 	arguments: Vec<OsString>,
 	cwd: &Path,
+	select_command: impl FnOnce(&[OsString], usize) -> Command,
 ) -> io::Result<Vec<u8>> {
 	let shell: Shell = std::env::var(VARIABLE)
 		.ok()
@@ -56,6 +56,7 @@ pub(super) fn respond(
 
 	let metadata = std::env::var_os("TRINE_COMPLETE_METADATA").is_some();
 	let grouped = shell == Shell::Zsh && metadata;
+	let command = select_command(&context.arguments, context.index);
 	let candidates = super::candidates(command, context, grouped)?;
 	if grouped {
 		return Ok(zsh::encode(&candidates));
