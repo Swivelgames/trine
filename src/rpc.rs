@@ -1,15 +1,21 @@
 //! Live, bounded JSON-RPC stdio profile over the shared action catalog.
 
-use crate::jsonrpc::framing;
+use std::io;
+
+use crate::{
+	Cancellation,
+	application::Application,
+	error::{Failure, FailureKind},
+	jsonrpc::framing,
+};
+
 mod host;
 mod outbox;
 mod protocol;
 mod sink;
+
 pub use crate::jsonrpc::stdio;
-
 pub use host::{HostReport, serve};
-
-use std::io;
 
 /// Resource settings are local host policy, not protocol negotiation.
 #[derive(Clone, Debug)]
@@ -74,4 +80,25 @@ impl Config {
 
 		Ok(())
 	}
+}
+
+/// Runs the default server on the process streams until shutdown or disconnect.
+/// The caller owns cancellation and process-level diagnostics.
+pub fn run_stdio(application: &Application, shutdown: Cancellation) -> Result<(), Failure> {
+	let (reader, writer) =
+		stdio::open().map_err(|error| Failure::new(FailureKind::Unavailable, error))?;
+	let report = smol::block_on(serve(
+		application,
+		reader,
+		writer,
+		Config::default(),
+		shutdown,
+		|_| {},
+	))
+	.map_err(|error| Failure::new(FailureKind::OutputFailed, error))?;
+
+	if let Some(message) = report.failure {
+		return Err(Failure::message(FailureKind::Unavailable, message));
+	}
+	Ok(())
 }
