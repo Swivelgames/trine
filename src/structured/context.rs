@@ -65,6 +65,8 @@ impl StructuredContext {
 		}
 	}
 
+	/// Deliver an event when observation is enabled. Live delivery can wait for capacity; calls
+	/// after the terminal phase begins fail.
 	pub async fn progress(&self, value: Value) -> Result<(), Failure> {
 		let sink: &dyn ProgressSink = {
 			let mut state = self
@@ -91,6 +93,8 @@ impl StructuredContext {
 		sink.progress(value).await
 	}
 
+	/// Submit the invocation's terminal payload during the view's finish callback. Duplicate or
+	/// out-of-phase submissions fail.
 	pub async fn terminal(&self, payload: Payload) -> Result<(), Failure> {
 		let sink = {
 			let mut state = self

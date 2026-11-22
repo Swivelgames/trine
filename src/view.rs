@@ -16,10 +16,16 @@ use std::{
 	sync::Arc,
 };
 
+/// Presents one invocation's ordered progress and terminal domain result. The factory creates a
+/// fresh view for each invocation.
 pub trait View<Output, Error, Event>: Send {
+	/// Error returned when presentation or interaction fails.
 	type Error: Send;
+	/// Value returned after successful terminal presentation.
 	type Completion: Send;
 
+	/// Answer a yes-or-no request. The default declines to supply an answer; interactive
+	/// implementations can monitor cancellation.
 	fn confirm(
 		&mut self,
 		_request: crate::invocation::Confirmation,
@@ -28,6 +34,8 @@ pub trait View<Output, Error, Event>: Send {
 		async { Ok(None) }
 	}
 
+	/// Return the zero-based index of a selected option, or `None` when interaction is
+	/// unavailable.
 	fn select(
 		&mut self,
 		_request: crate::invocation::Selection,
@@ -36,8 +44,11 @@ pub trait View<Output, Error, Event>: Send {
 		async { Ok(None) }
 	}
 
+	/// Present the next accepted progress event in delivery order.
 	fn progress(&mut self, event: Event) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
+	/// Present the returned domain result and produce a completion value. A handler panic
+	/// leaves this callback uncalled.
 	fn finish(
 		&mut self,
 		result: &Result<Output, Error>,

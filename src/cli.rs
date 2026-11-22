@@ -4,6 +4,7 @@
 //! explicit: the schema supplies types, not pluralization or command design.
 
 mod bindings;
+mod command;
 pub mod completion;
 mod input;
 pub mod output_mode;
@@ -17,14 +18,19 @@ use serde::de::DeserializeOwned;
 
 use crate::{Action, Cancellation, InvocationContext, RegistrationError, action::validate_name};
 use bindings::{validate_aliases, validate_bindings, validate_positionals};
-use parser::{build_command, parse};
+use command::{alias_command, build_command};
+use parser::parse;
 use schema::Shape;
 
 pub use bindings::{Alias, Bindings};
 pub use input::InputFields;
 
+/// Diagnostic from argument parsing or typed input assembly.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CliError(pub String);
+pub struct CliError(
+	/// Diagnostic for the caller supplying CLI arguments.
+	pub String,
+);
 
 impl fmt::Display for CliError {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -37,7 +43,9 @@ impl std::error::Error for CliError {}
 /// Help and version are terminal parse outcomes, before runtime startup.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Parsed<Input> {
+	/// A successfully parsed input ready for dispatch.
 	Input(Input),
+	/// Help or version text to print before returning to the caller.
 	Display(String),
 }
 
@@ -52,6 +60,8 @@ pub struct Cli<Input, Output, Error, Event> {
 }
 
 impl<Input, Output, Error, Event> Cli<Input, Output, Error, Event> {
+	/// Build a parser from an action's schema and explicit field mappings. Returns a
+	/// registration error if the mappings, aliases or positional layout are invalid.
 	pub fn new(
 		program: impl Into<String>,
 		version: impl Into<String>,
@@ -104,7 +114,7 @@ impl<Input, Output, Error, Event> Cli<Input, Output, Error, Event> {
 		);
 		command = command.subcommand(action_command.clone());
 		for alias in &aliases {
-			command = command.subcommand(parser::alias_command(&action_command, alias));
+			command = command.subcommand(alias_command(&action_command, alias));
 		}
 
 		for route in command.get_subcommands() {
@@ -139,6 +149,8 @@ impl<Input, Output, Error, Event> Cli<Input, Output, Error, Event> {
 		}
 	}
 
+	/// Parse native argument words, including the executable name, into typed input or display
+	/// text.
 	pub fn parse(
 		&self,
 		arguments: impl IntoIterator<Item = impl Into<OsString>>,

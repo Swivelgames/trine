@@ -1,3 +1,5 @@
+//! Ordering and ownership of repeated options alongside grouped operands.
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use trine::{

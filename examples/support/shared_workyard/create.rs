@@ -1,15 +1,52 @@
-//! Two typed actions with native inputs and independent CLI views. Simulation only.
+//! Register the simulated create action, its checkout alias and its interface views.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{io, num::NonZeroUsize, time::Duration};
 use trine::{
-	Action, InvocationContext, NativePath,
-	application::{Application, CliBinding, CliViewContext, Entry, Output},
+	Action, Application, Entry, InvocationContext, NativePath, RegistrationError,
+	application::{CliBinding, CliViewContext},
 	cli::{Alias, Bindings},
 	structured::StructuredBinding,
 	view::View,
 };
+
+pub(super) fn register(app: &mut Application) -> Result<(), RegistrationError> {
+	let action = Action::new("create", "Simulate task creation", create)?;
+	app.register(bind(action))
+}
+
+fn bind(
+	action: Action<CreateInput, CreateOutcome, CreateError, CreateProgress>,
+) -> Entry<CreateInput, CreateOutcome, CreateError, CreateProgress> {
+	let bindings = Bindings::new()
+		.positional("task")
+		.group("repositories", "path", "repo")
+		.native_path("repositories[].path")
+		.option("repositories[].name", "repo-name")
+		.option("repositories[].remote", "repo-remote")
+		.option("repositories[].from", "repo-from")
+		.option("remote", "remote")
+		.option("from", "from")
+		.option("checkout", "checkout")
+		.option("no_fetch", "no-fetch")
+		.option("pull", "pull");
+	let cli = CliBinding::new(bindings).alias(Alias::new("checkout").set("checkout", true));
+
+	let rpc = StructuredBinding::serde_with_progress(
+		|event: CreateProgress| Ok(serde_json::json!({"path":event.path,"phase":event.phase})),
+		NonZeroUsize::new(16).unwrap(),
+	);
+
+	Entry::new(action)
+		.cli(
+			cli,
+			|output| Ok(CreateView { output }),
+			|result| u8::from(!matches!(result, Ok(CreateOutcome::Completed { .. }))),
+		)
+		.rpc(rpc)
+		.mcp(StructuredBinding::serde())
+}
 
 #[derive(Deserialize, JsonSchema)]
 struct CreateInput {
@@ -52,6 +89,7 @@ enum CreateOutcome {
 		progress: Created,
 	},
 }
+
 #[derive(Serialize)]
 struct CreateError {
 	status: &'static str,
@@ -59,6 +97,7 @@ struct CreateError {
 	progress: Created,
 	error: ErrorDetail,
 }
+
 #[derive(Serialize)]
 struct ErrorDetail {
 	code: &'static str,
@@ -170,19 +209,6 @@ async fn create_with_phase_wait<F: std::future::Future<Output = ()>>(
 	Ok(CreateOutcome::Completed { progress: outcome })
 }
 
-#[derive(Deserialize, JsonSchema)]
-struct ListInput {
-	state_dir: NativePath,
-}
-
-#[derive(Serialize)]
-struct Listed {
-	state_dir: NativePath,
-	tasks: Vec<String>,
-}
-
-struct ListProgress;
-
 struct CreateView {
 	output: CliViewContext,
 }
@@ -213,136 +239,11 @@ impl View<CreateOutcome, CreateError, CreateProgress> for CreateView {
 	}
 }
 
-struct ListView {
-	output: CliViewContext,
-}
-
-impl View<Listed, String, ListProgress> for ListView {
-	type Completion = ();
-	type Error = io::Error;
-
-	async fn progress(&mut self, _: ListProgress) -> io::Result<()> {
-		Ok(())
-	}
-
-	async fn finish(&mut self, result: &Result<Listed, String>) -> io::Result<()> {
-		render_result(&self.output.stdout, result)
-	}
-}
-
-fn render_result<O: Serialize, E: Serialize>(
-	output: &Output,
-	result: &Result<O, E>,
-) -> io::Result<()> {
-	let response = match result {
-		Ok(value) => serde_json::json!({"status":"completed","outcome":value}),
-		Err(error) => serde_json::json!({"status":"failed","error":error}),
-	};
-
-	let mut bytes = serde_json::to_vec(&response)?;
-	bytes.push(b'\n');
-	output.write_all(&bytes)
-}
-
-pub fn application() -> Result<Application, Box<dyn std::error::Error>> {
-	application_with_create(Action::new("create", "Simulate task creation", create)?)
-}
-
-fn application_with_create(
-	create_action: Action<CreateInput, CreateOutcome, CreateError, CreateProgress>,
-) -> Result<Application, Box<dyn std::error::Error>> {
-	let mut app = Application::new("workyard-demo", env!("CARGO_PKG_VERSION"))?;
-	let create_binding = CliBinding::new(
-		Bindings::new()
-			.positional("task")
-			.group("repositories", "path", "repo")
-			.native_path("repositories[].path")
-			.option("repositories[].name", "repo-name")
-			.option("repositories[].remote", "repo-remote")
-			.option("repositories[].from", "repo-from")
-			.option("remote", "remote")
-			.option("from", "from")
-			.option("checkout", "checkout")
-			.option("no_fetch", "no-fetch")
-			.option("pull", "pull"),
-	)
-	.alias(Alias::new("checkout").set("checkout", true));
-	app.register(
-		Entry::new(create_action)
-			.cli(
-				create_binding,
-				|output| Ok(CreateView { output }),
-				|result| u8::from(!matches!(result, Ok(CreateOutcome::Completed { .. }))),
-			)
-			.rpc(StructuredBinding::serde_with_progress(
-				|event: CreateProgress| {
-					Ok(serde_json::json!({"path":event.path,"phase":event.phase}))
-				},
-				NonZeroUsize::new(16).unwrap(),
-			))
-			.mcp(StructuredBinding::serde()),
-	)?;
-
-	let list_action = Action::new(
-		"list",
-		"Simulate listing tasks",
-		|input: ListInput, _: InvocationContext<ListProgress>| async {
-			Ok::<_, String>(Listed {
-				state_dir: input.state_dir,
-				tasks: vec!["feat/payments".into()],
-			})
-		},
-	)?;
-	let list_binding = CliBinding::new(
-		Bindings::new()
-			.option("state_dir", "state-dir")
-			.native_path("state_dir"),
-	)
-	.capacity(None);
-	app.register(
-		Entry::new(list_action)
-			.cli(
-				list_binding,
-				|output| Ok(ListView { output }),
-				|result| u8::from(result.is_err()),
-			)
-			.rpc(StructuredBinding::serde())
-			.mcp(StructuredBinding::custom(|context| {
-				Ok(ListMcpView { context })
-			})),
-	)?;
-	Ok(app)
-}
-
-struct ListMcpView {
-	context: trine::structured::StructuredContext,
-}
-impl View<Listed, String, ListProgress> for ListMcpView {
-	type Completion = ();
-	type Error = trine::error::Failure;
-	async fn progress(&mut self, _: ListProgress) -> Result<(), trine::error::Failure> {
-		Ok(())
-	}
-	async fn finish(
-		&mut self,
-		result: &Result<Listed, String>,
-	) -> Result<(), trine::error::Failure> {
-		use trine::structured::Payload;
-		let payload = match result {
-			Ok(list) => Payload::Success(
-				serde_json::json!({"summary":format!("{} task(s)",list.tasks.len()),"tasks":list.tasks}),
-			),
-			Err(error) => Payload::DomainFailure(serde_json::json!({"message":error})),
-		};
-		self.context.terminal(payload).await
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use std::sync::{Arc, Mutex};
-	use trine::{Cancellation, cli::Parsed};
+	use trine::{Application, Cancellation, application::Output, cli::Parsed};
 
 	#[derive(Clone, Default)]
 	struct Capture(Arc<Mutex<Vec<u8>>>);
@@ -385,7 +286,8 @@ mod tests {
 			.await
 		})
 		.unwrap();
-		let app = application_with_create(action).unwrap();
+		let mut app = Application::new("demo", "1").unwrap();
+		app.register(bind(action)).unwrap();
 		let Parsed::Input(prepared) = app
 			.parse_cli([
 				"demo",
@@ -423,36 +325,5 @@ mod tests {
 				"completed": ["api"], "remaining": ["web"]
 			}),
 		);
-	}
-
-	#[test]
-	fn create_and_list_exit_policies_share_dispatch() {
-		let app = application().unwrap();
-		for args in [
-			vec![
-				"demo",
-				"create",
-				"feat/payments",
-				"--repo",
-				"api",
-				"--no-fetch",
-			],
-			vec!["demo", "list", "--state-dir", ".workyard"],
-		] {
-			let Parsed::Input(prepared) = app.parse_cli(args).unwrap() else {
-				panic!()
-			};
-			let report = prepared
-				.run(
-					CliViewContext {
-						stdout: Output::new(Capture::default()),
-						stderr: Output::new(Capture::default()),
-					},
-					Cancellation::new(),
-				)
-				.unwrap();
-			assert_eq!(report.exit_code(), 0);
-			assert!(!report.diagnostics.attempted);
-		}
 	}
 }

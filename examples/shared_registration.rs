@@ -1,13 +1,18 @@
-//! In-process structured presentation experiment; no RPC/MCP server or envelopes.
-#[path = "support/shared_workyard.rs"]
+//! Invoke two actions through their registered RPC and MCP views in process.
+
+#[path = "support/shared_workyard/mod.rs"]
 mod workyard;
+
 use trine::{Cancellation, structured::Payload};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let app = workyard::application()?;
 	let prepared = app.prepare_rpc(
 		&["create"],
 		serde_json::json!({
-			"task":"feat/payments", "repositories":[{"path":"api"},{"path":"web"}], "no_fetch":true
+			"task": "feat/payments",
+			"repositories": [{"path": "api"}, {"path": "web"}],
+			"no_fetch": true
 		}),
 		true,
 		Cancellation::new(),
@@ -16,6 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	assert!(create.execution.domain_succeeded && create.execution.presentation_succeeded);
 	println!("RPC progress: {}", create.transcript.progress.len());
 	println!("RPC terminal: {:?}", create.transcript.terminal);
+
 	let list = app.invoke_mcp(
 		&["list"],
 		serde_json::json!({"state_dir":".workyard"}),

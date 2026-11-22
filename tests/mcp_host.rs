@@ -1,3 +1,5 @@
+//! MCP session initialization, discovery, invocation and transport behavior.
+
 #[path = "mcp/admission.rs"]
 mod admission;
 #[path = "mcp/delivery.rs"]

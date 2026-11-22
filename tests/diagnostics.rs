@@ -1,3 +1,5 @@
+//! Diagnostic delivery and fallback when renderers or writers fail.
+
 use std::cell::Cell;
 use trine::{
 	diagnostics::{Diagnostic, DiagnosticRenderer, deliver},

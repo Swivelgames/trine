@@ -8,11 +8,14 @@ use std::{
 
 /// A shell inserts the value verbatim after applying its own quoting rules.
 pub struct Candidate {
+	/// Native word to insert when the candidate is selected.
 	pub value: OsString,
+	/// Optional label shown alongside the value by shells with description support.
 	pub description: Option<String>,
 }
 
 impl Candidate {
+	/// Create a candidate with an insertion value and no display label.
 	pub fn new(value: impl Into<OsString>) -> Self {
 		Self {
 			value: value.into(),
@@ -20,6 +23,7 @@ impl Candidate {
 		}
 	}
 
+	/// Attach a display label while preserving the insertion value.
 	pub fn description(mut self, description: impl Into<String>) -> Self {
 		self.description = Some(description.into());
 		self

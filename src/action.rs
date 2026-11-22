@@ -13,9 +13,12 @@ type Handler<Input, Output, Error, Event> = dyn Fn(
 	+ Send
 	+ Sync;
 
-/// A registration or CLI binding cannot be represented by this slice.
+/// An action, command path or interface binding could not be registered.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RegistrationError(pub String);
+pub struct RegistrationError(
+	/// Reason the supplied definition was rejected.
+	pub String,
+);
 
 impl fmt::Display for RegistrationError {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -53,6 +56,9 @@ impl<Input, Output, Error, Event> Clone for Action<Input, Output, Error, Event> 
 }
 
 impl<Input, Output, Error, Event> Action<Input, Output, Error, Event> {
+	/// Create an action and derive its discovery schema from the input type. Names must start
+	/// with a lowercase ASCII letter and contain only lowercase letters, digits or hyphens. A
+	/// blank description returns a registration error.
 	pub fn new<HandlerFn, HandlerFuture>(
 		name: impl Into<String>,
 		description: impl Into<String>,
@@ -81,14 +87,17 @@ impl<Input, Output, Error, Event> Action<Input, Output, Error, Event> {
 		})
 	}
 
+	/// Return the final segment of the action's command path.
 	pub fn name(&self) -> &str {
 		&self.name
 	}
 
+	/// Return the text shown in command help and structured discovery.
 	pub fn description(&self) -> &str {
 		&self.description
 	}
 
+	/// Borrow the JSON Schema generated for the handler's input.
 	pub fn input_schema(&self) -> &serde_json::Value {
 		&self.schema
 	}

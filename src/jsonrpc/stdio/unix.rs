@@ -1,3 +1,5 @@
+//! Unix process streams with readiness-driven pipe I/O and descriptor flag restoration.
+
 use futures_lite::io::{AsyncRead, AsyncWrite};
 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use std::{
@@ -12,6 +14,7 @@ enum Handle {
 	Regular(File),
 }
 
+/// A process stream that restores its descriptor flags on drop.
 pub struct Stdio {
 	handle: Handle,
 	original: OFlags,
@@ -86,6 +89,8 @@ impl AsyncWrite for Stdio {
 	}
 }
 
+/// Open exclusive asynchronous adapters for process stdin and stdout. Drop them to restore the
+/// original descriptor flags.
 pub fn open() -> io::Result<(Stdio, Stdio)> {
 	let input = File::from(rustix::io::dup(std::io::stdin())?);
 	let output = File::from(rustix::io::dup(std::io::stdout())?);

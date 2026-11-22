@@ -1,3 +1,5 @@
+//! Completion visibility for options attached to a preceding group occurrence.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;

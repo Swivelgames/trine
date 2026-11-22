@@ -1,3 +1,5 @@
+//! Progress token validation and event ordering across concurrent MCP calls.
+
 use super::fixture::*;
 use serde_json::{Value, json};
 use std::{

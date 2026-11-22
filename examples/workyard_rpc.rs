@@ -1,6 +1,8 @@
 //! On-demand RPC projection of the shared simulation; no Git effects.
-#[path = "support/shared_workyard.rs"]
+
+#[path = "support/shared_workyard/mod.rs"]
 mod workyard;
+
 use std::process::ExitCode;
 use trine::{
 	Cancellation,
@@ -21,6 +23,7 @@ fn main() -> ExitCode {
 		}
 	}
 }
+
 fn run() -> Result<rpc::HostReport, Box<dyn std::error::Error>> {
 	let application = workyard::application()?;
 	let shutdown = Cancellation::new();

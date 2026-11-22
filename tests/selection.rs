@@ -1,3 +1,5 @@
+//! Multiple-choice interaction through a view independently of progress.
+
 use std::convert::Infallible;
 use trine::{
 	Action, Cancellation, InvocationContext,

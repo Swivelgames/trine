@@ -25,10 +25,14 @@ use routing::CliRoutes;
 use serde_json::Value;
 use std::{collections::BTreeMap, ffi::OsString, sync::Arc};
 
+/// The presentation interface used to discover actions or configure diagnostics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interface {
+	/// Human-facing commands, including direct CLI JSON output.
 	Cli,
+	/// Named action invocations over the RPC adapter.
 	Rpc,
+	/// Agent tools exposed through the Model Context Protocol.
 	Mcp,
 }
 
@@ -54,10 +58,14 @@ struct StructuredPrepare {
 	prepare: Box<StructuredFactory>,
 }
 
+/// Discovery metadata for one action on a particular interface.
 #[derive(Clone, Debug)]
 pub struct ActionInfo {
+	/// Namespace segments followed by the action name, in invocation order.
 	pub path: Vec<String>,
+	/// Human-readable summary advertised to callers.
 	pub description: String,
+	/// JSON Schema describing the input accepted on this interface.
 	pub input_schema: Value,
 }
 
@@ -127,6 +135,7 @@ impl Renderers {
 	}
 }
 
+/// A catalog that routes CLI commands, RPC requests and MCP tool calls to typed actions.
 pub struct Application {
 	diagnostics: Renderers,
 	program: String,
@@ -136,6 +145,8 @@ pub struct Application {
 }
 
 impl Application {
+	/// Create an empty catalog. The program name follows the same naming rules as an action;
+	/// the version appears in help and host identity.
 	pub fn new(
 		program: impl Into<String>,
 		version: impl Into<String>,
@@ -156,6 +167,7 @@ impl Application {
 		(&self.program, &self.version)
 	}
 
+	/// Replace the renderer used for framework diagnostics on the selected interface.
 	pub fn diagnostic_renderer(
 		&mut self,
 		interface: Interface,
@@ -164,6 +176,8 @@ impl Application {
 		*self.diagnostics.get_mut(interface) = renderer;
 	}
 
+	/// Validate an entry's namespace, bindings and interface registrations before adding its
+	/// routes. An invalid or conflicting entry leaves the catalog unchanged.
 	pub fn register<I, O, E, P>(
 		&mut self,
 		entry: Entry<I, O, E, P>,
@@ -236,6 +250,7 @@ impl Application {
 		})
 	}
 
+	/// List actions exposed on the requested interface, in command-path order.
 	pub fn discover(&self, interface: Interface) -> Vec<&ActionInfo> {
 		self.entries
 			.values()
@@ -255,6 +270,8 @@ impl Application {
 		self.cli_routes.command(&self.program, &self.version)
 	}
 
+	/// Parse native arguments including the executable name. Help and version requests return
+	/// display text; an action match returns a prepared invocation.
 	pub fn parse_cli(
 		&self,
 		arguments: impl IntoIterator<Item = impl Into<OsString>>,
@@ -267,6 +284,7 @@ impl Application {
 		)
 	}
 
+	/// Run an RPC invocation synchronously in process and collect its structured presentation.
 	pub fn invoke_rpc(
 		&self,
 		path: &[&str],
@@ -274,9 +292,11 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<StructuredReport, InvocationError> {
-		self.invoke_structured(Interface::Rpc, path, input, observe, cancellation)
+		let invocation = self.prepare_rpc(path, input, observe, cancellation)?;
+		Ok(smol::block_on(invocation.run()))
 	}
 
+	/// Run an MCP invocation synchronously in process and collect its structured presentation.
 	pub fn invoke_mcp(
 		&self,
 		path: &[&str],
@@ -284,9 +304,11 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<StructuredReport, InvocationError> {
-		self.invoke_structured(Interface::Mcp, path, input, observe, cancellation)
+		let invocation = self.prepare_mcp(path, input, observe, cancellation)?;
+		Ok(smol::block_on(invocation.run()))
 	}
 
+	/// Decode RPC input and construct its view. Call [`PreparedStructured::run`] to execute it.
 	pub fn prepare_rpc(
 		&self,
 		path: &[&str],
@@ -294,16 +316,11 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<PreparedStructured, InvocationError> {
-		self.prepare_structured(
-			Interface::Rpc,
-			path,
-			input,
-			observe,
-			cancellation,
-			Destination::Transcript,
-		)
+		self.prepare_structured(Interface::Rpc, path, input, observe, cancellation)
 	}
 
+	/// Decode the tool's advertised input and construct its MCP view.
+	/// Call [`PreparedStructured::run`] to execute it.
 	pub fn prepare_mcp(
 		&self,
 		path: &[&str],
@@ -311,14 +328,7 @@ impl Application {
 		observe: bool,
 		cancellation: Cancellation,
 	) -> Result<PreparedStructured, InvocationError> {
-		self.prepare_structured(
-			Interface::Mcp,
-			path,
-			input,
-			observe,
-			cancellation,
-			Destination::Transcript,
-		)
+		self.prepare_structured(Interface::Mcp, path, input, observe, cancellation)
 	}
 
 	fn prepare_structured(
@@ -328,7 +338,6 @@ impl Application {
 		input: Value,
 		observe: bool,
 		cancellation: Cancellation,
-		destination: Destination,
 	) -> Result<PreparedStructured, InvocationError> {
 		let key: Vec<String> = path.iter().map(|s| (*s).into()).collect();
 		let entry = self.entries.get(&key).ok_or(InvocationError::Unavailable)?;
@@ -341,7 +350,7 @@ impl Application {
 		.ok_or(InvocationError::Unavailable)?;
 
 		(prepare.prepare)(
-			destination,
+			Destination::Transcript,
 			input,
 			observe,
 			cancellation,
@@ -370,25 +379,6 @@ impl Application {
 			cancellation,
 			self.diagnostics.rpc.clone(),
 		)
-	}
-
-	fn invoke_structured(
-		&self,
-		interface: Interface,
-		path: &[&str],
-		input: Value,
-		observe: bool,
-		cancellation: Cancellation,
-	) -> Result<StructuredReport, InvocationError> {
-		let prepared = self.prepare_structured(
-			interface,
-			path,
-			input,
-			observe,
-			cancellation,
-			Destination::Transcript,
-		)?;
-		Ok(smol::block_on(prepared.run()))
 	}
 }
 

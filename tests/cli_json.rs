@@ -1,3 +1,5 @@
+//! Machine-readable CLI results, exit policy and isolation from human views.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

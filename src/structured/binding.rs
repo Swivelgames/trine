@@ -19,6 +19,8 @@ pub struct StructuredBinding<O, E, P> {
 }
 
 impl<O: Sync + 'static, E: Sync + 'static, P: Send + 'static> StructuredBinding<O, E, P> {
+	/// Construct each invocation's view with a factory that receives its own output sink.
+	/// Progress is initially disabled.
 	pub fn custom<V, F>(factory: F) -> Self
 	where
 		V: View<O, E, P, Completion = ()> + 'static,
@@ -41,10 +43,12 @@ impl<O: Sync + 'static, E: Sync + 'static, P: Send + 'static> StructuredBinding<
 impl<O: Serialize + Sync + 'static, E: Serialize + Sync + 'static, P: Send + 'static>
 	StructuredBinding<O, E, P>
 {
+	/// Serialize domain successes and errors as terminal payloads. Progress is disabled.
 	pub fn serde() -> Self {
 		Self::custom(|context| Ok(SerdeView::<O, E, P>::new(context, None)))
 	}
 
+	/// Serialize terminal results and map observed events to JSON with a bounded progress buffer.
 	pub fn serde_with_progress(
 		mapper: impl Fn(P) -> Result<Value, Failure> + Send + Sync + 'static,
 		capacity: NonZeroUsize,

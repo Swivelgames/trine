@@ -24,6 +24,7 @@ impl Default for Cancellation {
 }
 
 impl Cancellation {
+	/// Create a token in the uncancelled state.
 	pub fn new() -> Self {
 		let (sender, signal) = async_channel::bounded(1);
 		Self {
@@ -32,14 +33,17 @@ impl Cancellation {
 		}
 	}
 
+	/// Request cancellation for all clones and wake current waiters.
 	pub fn cancel(&self) {
 		self.signal.close();
 	}
 
+	/// Return whether cancellation has been requested.
 	pub fn is_cancelled(&self) -> bool {
 		self.signal.is_closed()
 	}
 
+	/// Wait until cancellation is requested; completes immediately for a cancelled token.
 	pub async fn cancelled(&self) {
 		let _ = self.signal.recv().await;
 	}
@@ -48,7 +52,9 @@ impl Cancellation {
 /// Why a subscribed progress event could not be accepted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EmitError {
+	/// Cancellation interrupted a pending send or decision.
 	Cancelled,
+	/// The receiving view or invocation channel has closed.
 	Closed,
 }
 
@@ -83,6 +89,7 @@ impl<Event> Clone for InvocationContext<Event> {
 }
 
 impl<Event> InvocationContext<Event> {
+	/// Create a context that discards progress and has no interactive decision receiver.
 	pub fn unobserved(cancellation: Cancellation) -> Self {
 		Self {
 			cancellation,
@@ -91,6 +98,8 @@ impl<Event> InvocationContext<Event> {
 		}
 	}
 
+	/// Create a context and a bounded FIFO receiver. Producers await available capacity while
+	/// the consumer drains events.
 	pub fn observed(capacity: NonZeroUsize, cancellation: Cancellation) -> (Self, Receiver<Event>) {
 		let (events, receiver) = async_channel::bounded(capacity.get());
 		(
@@ -135,6 +144,7 @@ impl<Event> InvocationContext<Event> {
 		.await
 	}
 
+	/// Borrow the token to check for cancellation at a safe point in the handler.
 	pub fn cancellation(&self) -> &Cancellation {
 		&self.cancellation
 	}

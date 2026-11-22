@@ -1,3 +1,5 @@
+//! CLI schema projections for grouped fields, aliases and scalar options.
+
 #[allow(dead_code)]
 mod support;
 

@@ -1,3 +1,5 @@
+//! Discovery and invocation for tools with a projected input schema.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

@@ -20,14 +20,17 @@ struct Entry {
 	prepare: Arc<Prepare>,
 }
 
+/// A parsed CLI command and its one-shot dispatch operation.
 pub struct Prepared(Box<dyn FnOnce(Cancellation) -> DispatchReport + Send>);
 
 impl Prepared {
+	/// Create the invocation's view and execute the selected command.
 	pub fn run(self, cancellation: Cancellation) -> DispatchReport {
 		(self.0)(cancellation)
 	}
 }
 
+/// A CLI-only command tree combining actions with different input and result types.
 pub struct Registry {
 	program: String,
 	version: String,
@@ -35,6 +38,7 @@ pub struct Registry {
 }
 
 impl Registry {
+	/// Create an empty CLI registry with a validated program name and help version.
 	pub fn new(
 		program: impl Into<String>,
 		version: impl Into<String>,
@@ -135,6 +139,8 @@ impl Registry {
 		Ok(())
 	}
 
+	/// Parse an argv sequence including its executable name into a dispatch operation or
+	/// display text.
 	pub fn parse(
 		&self,
 		arguments: impl IntoIterator<Item = impl Into<OsString>>,

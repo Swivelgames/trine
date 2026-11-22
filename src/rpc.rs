@@ -1,4 +1,15 @@
 //! Live, bounded JSON-RPC stdio profile over the shared action catalog.
+//!
+//! Use [`run_stdio`] to serve a catalog on process stdin and stdout. Send an
+//! `invoke` request with a unique ID, an action path (an array of strings) and an
+//! input object. Set `params.observe` to true to request progress. Each progress
+//! notification carries the invocation ID and a sequence starting at one.
+//! Send a `cancel` notification with `params.id` to request cancellation.
+//!
+//! The host retains active IDs and a bounded history of settled IDs. A duplicate
+//! produces a `rejected` notification and leaves the original response correlated
+//! with its request. Clean input EOF drains accepted work. See [`Config`] and
+//! [`serve`] to change limits or supply your own asynchronous streams.
 
 use std::io;
 
@@ -20,14 +31,23 @@ pub use host::{HostReport, serve};
 /// Resource settings are local host policy, not protocol negotiation.
 #[derive(Clone, Debug)]
 pub struct Config {
+	/// Maximum bytes accepted in a single input frame.
 	pub input_frame_bytes: usize,
+	/// Maximum bytes allowed in an encoded output frame.
 	pub output_frame_bytes: usize,
+	/// Maximum UTF-8 byte length of a string request ID.
 	pub id_bytes: usize,
+	/// Number of settled request IDs retained for duplicate detection.
 	pub history: usize,
+	/// Maximum concurrent invocations admitted on one connection.
 	pub active_invocations: usize,
+	/// Maximum ordinary output messages buffered by the host.
 	pub output_messages: usize,
+	/// Byte budget for buffered ordinary output.
 	pub output_bytes: usize,
+	/// Maximum buffered rejection messages.
 	pub rejection_messages: usize,
+	/// Separate byte budget for buffered rejection messages.
 	pub rejection_bytes: usize,
 }
 
@@ -48,6 +68,8 @@ impl Default for Config {
 }
 
 impl Config {
+	/// Check that limits are nonzero, fit their counters and can accommodate required frames.
+	/// Invalid combinations return an invalid-input I/O error.
 	pub fn validate(&self) -> io::Result<()> {
 		let event_capacity = self
 			.active_invocations

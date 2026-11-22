@@ -1,3 +1,5 @@
+//! Concurrent tool admission with capacity reserved for read-only calls.
+
 use super::fixture::*;
 use serde_json::{Value, json};
 use trine::{

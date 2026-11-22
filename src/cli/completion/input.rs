@@ -39,6 +39,7 @@ pub struct Group {
 }
 
 impl Group {
+	/// Look up a field in this particular repeated argument group.
 	pub fn field(&self, name: &str) -> OptionValue<'_> {
 		value(self.fields.get(name))
 	}

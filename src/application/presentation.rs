@@ -12,6 +12,7 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
+/// A clonable, synchronized output writer with an explicit terminal capability.
 #[derive(Clone)]
 pub struct Output {
 	writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -19,6 +20,7 @@ pub struct Output {
 }
 
 impl Output {
+	/// Wrap a writer as a plain output stream. Use `with_terminal` for interactive output.
 	pub fn new(writer: impl Write + Send + 'static) -> Self {
 		Self::with_terminal(writer, false)
 	}
@@ -31,6 +33,7 @@ impl Output {
 		}
 	}
 
+	/// Return the terminal capability supplied by the host.
 	pub fn is_terminal(&self) -> bool {
 		self.terminal
 	}
@@ -46,9 +49,12 @@ impl Output {
 	}
 }
 
+/// Output streams for one CLI view. The default uses process stdout and stderr.
 #[derive(Clone)]
 pub struct CliViewContext {
+	/// Destination for the command's primary output.
 	pub stdout: Output,
+	/// Destination for progress and diagnostics.
 	pub stderr: Output,
 }
 
@@ -61,12 +67,15 @@ impl Default for CliViewContext {
 	}
 }
 
+/// The CLI view's completion metadata used to choose a process exit code.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CliCompletion {
+	/// Explicit process exit code, or `None` to use the domain outcome.
 	pub exit_code: Option<u8>,
 }
 
 impl CliCompletion {
+	/// Set an explicit exit code for a completed presentation.
 	pub fn exit(code: u8) -> Self {
 		Self {
 			exit_code: Some(code),

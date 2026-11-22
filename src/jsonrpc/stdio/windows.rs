@@ -1,3 +1,5 @@
+//! Windows process streams backed by cancellable, joined synchronous I/O workers.
+
 use futures_lite::io::{AsyncRead, AsyncWrite};
 use std::{
 	future::Future,
@@ -44,6 +46,7 @@ impl Drop for Worker {
 	}
 }
 
+/// Read process stdin on a dedicated worker.
 pub struct Reader {
 	_worker: Worker,
 	receiver: Box<async_channel::Receiver<io::Result<Vec<u8>>>>,
@@ -97,6 +100,7 @@ enum Command {
 	Flush,
 }
 
+/// Write and flush process stdout on a dedicated worker.
 pub struct Writer {
 	_worker: Worker,
 	sender: async_channel::Sender<Command>,
@@ -174,6 +178,7 @@ impl AsyncWrite for Writer {
 	}
 }
 
+/// Open exclusive adapters for process stdin and stdout. Dropping them joins their workers.
 pub fn open() -> io::Result<(Reader, Writer)> {
 	let stopped = Arc::new(AtomicBool::new(false));
 	let read_stop = stopped.clone();

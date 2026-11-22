@@ -1,4 +1,9 @@
 //! Lossless host-native paths with an explicit structured transport encoding.
+//!
+//! Unicode paths serialize as strings. Other Unix paths use a tagged object with
+//! base64-encoded bytes. Windows uses a tagged object with UTF-16 code units.
+//! Decoding a foreign platform's tagged path fails. Relative paths can be
+//! resolved against an explicit caller-supplied directory.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -10,8 +15,12 @@ use std::{
 	path::{Path, PathBuf},
 };
 
+/// The supplied path could not be represented on this host.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PathError(pub String);
+pub struct PathError(
+	/// Diagnostic describing the invalid path or encoding.
+	pub String,
+);
 
 impl fmt::Display for PathError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -28,10 +37,12 @@ enum EncodedPath {
 	Windows { wide: Vec<u16> },
 }
 
+/// A host-native path that round-trips through Serde, including non-Unicode names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativePath(PathBuf);
 
 impl NativePath {
+	/// Wrap a path without accessing the filesystem. Returns an error if it contains a NUL.
 	pub fn new(path: impl Into<PathBuf>) -> Result<Self, PathError> {
 		let path = path.into();
 
@@ -54,10 +65,12 @@ impl NativePath {
 		Ok(Self(path))
 	}
 
+	/// Borrow the underlying path without changing its encoding.
 	pub fn as_path(&self) -> &Path {
 		&self.0
 	}
 
+	/// Consume the wrapper and recover the original owned path.
 	pub fn into_path_buf(self) -> PathBuf {
 		self.0
 	}

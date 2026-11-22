@@ -1,7 +1,4 @@
-//! Experimental typed actions, invocation contexts, and schema-assisted CLI views.
-//!
-//! Actions expose standard futures and remain independent of their presentation.
-
+#![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 pub mod action;

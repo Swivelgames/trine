@@ -1,3 +1,5 @@
+//! Structured encoding, host compatibility and resolution of native paths.
+
 use std::path::Path;
 use trine::NativePath;
 

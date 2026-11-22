@@ -1,3 +1,5 @@
+//! Request ID parsing shared by both stdio hosts. Integer IDs retain their full JSON range.
+
 use serde_json::Value;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

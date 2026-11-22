@@ -1,3 +1,5 @@
+//! Shared MCP catalog, transport and request fixtures for host tests.
+
 use futures_lite::io::{AsyncWrite, Cursor};
 use schemars::JsonSchema;
 use serde::Deserialize;

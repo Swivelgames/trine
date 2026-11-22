@@ -3,16 +3,21 @@
 use super::{Cancellation, EmitError};
 use async_channel::{Receiver, Sender};
 
+/// A yes-or-no decision requested by a handler.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Confirmation {
+	/// Application-defined identifier for the decision.
 	pub code: String,
+	/// Question to show the person making the decision.
 	pub message: String,
 }
 
 /// Select one of the supplied labels. The returned index refers to this order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
+	/// Question describing the choice.
 	pub message: String,
+	/// Ordered labels; a selected index refers to this vector.
 	pub options: Vec<String>,
 }
 

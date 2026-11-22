@@ -1,3 +1,5 @@
+//! MCP request correlation and host availability after invocation failures.
+
 use super::fixture::*;
 use serde_json::Value;
 use std::{

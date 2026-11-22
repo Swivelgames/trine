@@ -2,10 +2,14 @@
 
 use std::fmt;
 
+/// Why a structured request or CLI view could not be prepared for execution.
 #[derive(Debug)]
 pub enum InvocationError {
+	/// The selected interface has no action at the supplied path.
 	Unavailable,
+	/// The request could not be decoded into the handler's input.
 	Input(crate::error::Failure),
+	/// The invocation's view factory failed.
 	Setup(crate::error::Failure),
 }
 
@@ -20,6 +24,7 @@ impl fmt::Display for InvocationError {
 }
 
 impl InvocationError {
+	/// Classify the preparation error for host diagnostics.
 	pub fn kind(&self) -> crate::error::FailureKind {
 		use crate::error::FailureKind;
 		match self {

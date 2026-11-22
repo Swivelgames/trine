@@ -13,20 +13,28 @@ use crate::{
 use serde::Serialize;
 use serde_json::Value;
 
+/// Machine-readable framework diagnostic in a CLI JSON response.
 #[derive(Debug, Serialize)]
 pub struct JsonError {
+	/// Stable classification suitable for programmatic handling.
 	pub code: &'static str,
+	/// Human-readable detail about the failure.
 	pub message: String,
 }
 
+/// Terminal document written for a CLI invocation using `--json`.
 #[derive(Debug, Serialize)]
 pub struct JsonResponse {
+	/// Process exit code associated with this document.
 	pub exit_code: u8,
+	/// Serialized action outcome, when captured. This may contain a domain error.
 	pub result: Option<Value>,
+	/// Framework diagnostic for parsing, execution or presentation failure.
 	pub error: Option<JsonError>,
 }
 
 impl JsonResponse {
+	/// Construct a framework-error response with exit code one and no domain result.
 	pub fn failure(kind: FailureKind, message: impl Into<String>) -> Self {
 		Self {
 			exit_code: 1,

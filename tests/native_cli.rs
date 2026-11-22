@@ -1,3 +1,5 @@
+//! Lossless CLI parsing of native paths in grouped and scalar inputs.
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::ffi::OsString;

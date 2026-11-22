@@ -1,3 +1,5 @@
+//! Async invocation settlement under backpressure, cancellation and panics.
+
 use std::{
 	num::NonZeroUsize,
 	sync::{

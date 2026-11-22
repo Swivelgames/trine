@@ -1,3 +1,5 @@
+//! Typed input assembly from named fields, native paths and Serde defaults.
+
 use serde::Deserialize;
 use serde_json::json;
 use trine::{NativePath, cli::InputFields};

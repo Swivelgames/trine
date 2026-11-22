@@ -31,6 +31,7 @@ pub struct Entry<I, O, E, P> {
 }
 
 impl<I, O, E, P> Entry<I, O, E, P> {
+	/// Start an entry for an action. Enable at least one interface before registering it.
 	pub fn new(action: Action<I, O, E, P>) -> Self {
 		Self {
 			action,
@@ -50,6 +51,7 @@ impl<I, O, E, P> Entry<I, O, E, P> {
 		self
 	}
 
+	/// Set the namespace segments preceding the action name in its registered path.
 	pub fn namespace(mut self, segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
 		self.namespace = segments.into_iter().map(Into::into).collect();
 		self
@@ -125,6 +127,7 @@ impl<I: Send + 'static, O: Send + Sync + 'static, E: Send + Sync + 'static, P: S
 		self
 	}
 
+	/// Expose this action through RPC with the supplied structured view binding.
 	pub fn rpc(mut self, binding: StructuredBinding<O, E, P>) -> Self
 	where
 		I: DeserializeOwned,
@@ -138,6 +141,7 @@ impl<I: Send + 'static, O: Send + Sync + 'static, E: Send + Sync + 'static, P: S
 		self
 	}
 
+	/// Expose this action as an MCP tool using the action's input type and description.
 	pub fn mcp(mut self, binding: StructuredBinding<O, E, P>) -> Self
 	where
 		I: DeserializeOwned,

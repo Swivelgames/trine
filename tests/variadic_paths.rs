@@ -1,3 +1,5 @@
+//! Variadic native positionals interleaved with named options.
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::ffi::OsString;

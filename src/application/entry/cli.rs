@@ -13,6 +13,7 @@ use crate::{
 };
 use std::{num::NonZeroUsize, sync::Arc};
 
+/// CLI argument mappings, aliases and progress-buffer settings for an entry.
 pub struct CliBinding {
 	bindings: Bindings,
 	aliases: Vec<Alias>,
@@ -20,6 +21,7 @@ pub struct CliBinding {
 }
 
 impl CliBinding {
+	/// Start with the supplied argument mappings and a 16-event progress buffer.
 	pub fn new(bindings: Bindings) -> Self {
 		Self {
 			bindings,
@@ -28,11 +30,13 @@ impl CliBinding {
 		}
 	}
 
+	/// Add another command spelling for the same action.
 	pub fn alias(mut self, alias: Alias) -> Self {
 		self.aliases.push(alias);
 		self
 	}
 
+	/// Set the maximum number of buffered CLI progress events. Pass `None` to disable observation.
 	pub fn capacity(mut self, capacity: Option<NonZeroUsize>) -> Self {
 		self.capacity = capacity;
 		self

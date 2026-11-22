@@ -1,4 +1,4 @@
-//! In-process presentation harness. These values are not RPC or MCP envelopes.
+//! Structured views and result bindings for in-process calls and live RPC and MCP hosts.
 
 mod binding;
 mod context;

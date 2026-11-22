@@ -4,8 +4,11 @@ use std::{ffi::OsString, path::PathBuf};
 /// All words remain available, including placement flags after the cursor.
 #[derive(Clone, Debug)]
 pub struct Context {
+	/// Decoded native words, starting with the executable.
 	pub arguments: Vec<OsString>,
+	/// Index of the word being completed in `arguments`.
 	pub index: usize,
+	/// Working directory used to resolve relative path suggestions.
 	pub cwd: PathBuf,
 	pub(super) slash_paths: bool,
 	pub(super) input: Option<super::input::Input>,
@@ -13,13 +16,18 @@ pub struct Context {
 
 /// A placement option may be absent, complete, or unsafe to infer from partial input.
 pub enum OptionValue<'a> {
+	/// No occurrence supplied a value for this field.
 	Absent,
+	/// The option or its value is still being entered.
 	Incomplete,
+	/// A complete native value is available.
 	Present(&'a std::ffi::OsStr),
+	/// Conflicting or malformed input prevents a reliable choice.
 	Ambiguous,
 }
 
 impl Context {
+	/// Construct a completion query from shell words, a word index and a working directory.
 	pub fn new(arguments: Vec<OsString>, index: usize, cwd: PathBuf) -> Self {
 		Self {
 			arguments,

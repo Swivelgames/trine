@@ -1,3 +1,5 @@
+//! Structured view lifecycle and distinction between domain and delivery failures.
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;

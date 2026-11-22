@@ -5,6 +5,8 @@ use inquire::{Select, error::InquireError, ui::Styled};
 use std::io;
 
 impl CliViewContext {
+	/// Prompt for an option index on an interactive terminal. Cancellation or unavailable input
+	/// returns `None`; terminal I/O failures propagate.
 	pub fn select(
 		&self,
 		request: Selection,

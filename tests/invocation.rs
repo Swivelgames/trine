@@ -1,3 +1,5 @@
+//! Direct and CLI invocation parity, bounded event delivery and cancellation.
+
 mod support;
 
 use std::{num::NonZeroUsize, time::Duration};

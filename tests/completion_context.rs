@@ -1,3 +1,5 @@
+//! Cursor-relative field values exposed to dynamic completion providers.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{

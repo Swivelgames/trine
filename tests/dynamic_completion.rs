@@ -1,3 +1,5 @@
+//! Shell candidate generation from native input without executing actions.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{

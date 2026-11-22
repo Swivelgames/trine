@@ -1,3 +1,5 @@
+//! Live RPC host behavior under cancellation and bounded delivery.
+
 use futures_lite::io::{AsyncRead, AsyncWrite, Cursor};
 use serde_json::{Value, json};
 use std::{

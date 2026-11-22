@@ -1,6 +1,8 @@
 //! CLI projection of the shared Workyard simulation catalog.
-#[path = "support/shared_workyard.rs"]
+
+#[path = "support/shared_workyard/mod.rs"]
 mod workyard;
+
 use std::process::ExitCode;
 use trine::{Cancellation, application::CliViewContext, cli::Parsed};
 

@@ -9,15 +9,22 @@ use std::{
 	sync::Arc,
 };
 
+/// Facts available to a renderer after abnormal execution or failed presentation.
 #[derive(Clone, Debug)]
 pub struct Diagnostic {
+	/// Execution failure detail when the handler could not return a domain result.
 	pub execution_failure: Option<String>,
+	/// Whether the handler returned a successful domain result.
 	pub domain_returned_ok: bool,
+	/// Classification of a failed view, if any.
 	pub presentation_failure: Option<FailureKind>,
+	/// Text from the view's failure cause when available.
 	pub presentation_message: Option<String>,
 }
 
 impl Diagnostic {
+	/// Extract a diagnostic when execution or presentation failed. A normally presented domain
+	/// error yields `None`.
 	pub fn from_report(report: &DispatchReport) -> Option<Self> {
 		if report.execution_failure.is_none()
 			&& report.presentation_status != PresentationStatus::Failed
@@ -38,6 +45,7 @@ impl Diagnostic {
 		})
 	}
 
+	/// Format the default host diagnostic from the recorded facts.
 	pub fn message(&self) -> String {
 		let mut message = match &self.execution_failure {
 			Some(error) => format!("Execution terminated: {error}; effects may be incomplete."),
@@ -62,6 +70,7 @@ impl Diagnostic {
 
 type Render = dyn Fn(&Diagnostic) -> Result<String, Failure> + Send + Sync;
 
+/// A clonable policy for turning a framework diagnostic into text.
 #[derive(Clone)]
 pub struct DiagnosticRenderer(Arc<Render>);
 
@@ -75,6 +84,7 @@ impl DiagnosticRenderer {
 		})
 	}
 
+	/// Install a formatter that can report its own failure to the host.
 	pub fn new(
 		render: impl Fn(&Diagnostic) -> Result<String, Failure> + Send + Sync + 'static,
 	) -> Self {
@@ -88,11 +98,16 @@ impl Default for DiagnosticRenderer {
 	}
 }
 
+/// Record of primary and fallback delivery attempts for one diagnostic.
 #[derive(Clone, Debug, Default)]
 pub struct DiagnosticDelivery {
+	/// Whether the host attempted to render and write the primary diagnostic.
 	pub attempted: bool,
+	/// Cause of primary rendering or delivery failure, if any.
 	pub failure: Option<Failure>,
+	/// Whether the primary failure triggered a fallback attempt.
 	pub fallback_attempted: bool,
+	/// Cause of fallback delivery failure, if any.
 	pub fallback_failure: Option<Failure>,
 }
 

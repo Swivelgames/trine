@@ -1,3 +1,5 @@
+//! RPC wire responses, request identity, frame limits and termination.
+
 use futures_lite::io::{AsyncWrite, Cursor};
 use serde_json::{Value, json};
 use std::{

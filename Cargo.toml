@@ -1,9 +1,11 @@
 [package]
 name = "trine"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
-publish = false
-description = "Experimental typed actions with schema-assisted CLI presentation"
+license = "MIT"
+repository = "https://github.com/Swivelgames/Trine"
+readme = "README.md"
+description = "Typed actions and views for CLI, JSON-RPC and MCP applications"
 
 [dependencies]
 base64 = "0.22"
@@ -27,3 +29,6 @@ rustix = { version = "1.1", features = ["fs"] }
 
 [features]
 cli-confirmation = ["dep:inquire"]
+
+[package.metadata.docs.rs]
+all-features = true

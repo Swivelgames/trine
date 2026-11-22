@@ -1,3 +1,5 @@
+//! Confirmation handling with interactive, unattended and cancelled invocations.
+
 use std::convert::Infallible;
 use trine::{
 	Action, Cancellation, InvocationContext,

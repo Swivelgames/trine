@@ -1,3 +1,5 @@
+//! Ordered progress, terminal presentation and failure propagation for typed views.
+
 use std::{
 	num::NonZeroUsize,
 	sync::{Arc, Mutex, mpsc},

@@ -1,3 +1,5 @@
+//! MCP shutdown and delivery when a peer closes or stops reading.
+
 use super::fixture::*;
 use futures_lite::{
 	future,

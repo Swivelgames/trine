@@ -9,41 +9,58 @@ use std::{
 	sync::Arc,
 };
 
+/// Abnormal handler termination before a domain result was available.
 #[derive(Clone, Debug)]
 pub struct ExecutionFailure {
+	/// Diagnostic describing the abnormal termination.
 	pub message: String,
 }
 
+/// Settlement of the handler, tracked independently of the view.
 #[derive(Debug)]
 pub enum ExecutionOutcome<O, E> {
+	/// The handler returned its domain result, including any domain error.
 	Completed(Result<O, E>),
+	/// Execution terminated abnormally.
 	Failed(ExecutionFailure),
 }
 
+/// Failure encountered while presenting an invocation.
 #[derive(Debug)]
 pub enum PresentationFailure<E> {
+	/// The view returned its own error.
 	Output(E),
+	/// The view panicked during presentation or cleanup.
 	Panicked,
 }
 
+/// The handler result and the separately observed terminal state of its view.
 #[derive(Debug)]
 pub struct ExecutionReport<O, E, V, C = ()> {
+	/// Handler settlement, available even when presentation failed.
 	pub outcome: ExecutionOutcome<O, E>,
+	/// View settlement, including its completion value when successful.
 	pub presentation: PresentationState<C, PresentationFailure<V>>,
 }
 
+/// Whether the view finished, failed, or had no domain result to present.
 #[derive(Debug)]
 pub enum PresentationState<C, E> {
+	/// The view finished and supplied its completion value.
 	Completed(C),
+	/// The view failed to present the invocation.
 	Failed(E),
+	/// No domain result was available for terminal presentation.
 	Skipped,
 }
 
 impl<C, E> PresentationState<C, E> {
+	/// Return true when terminal presentation completed.
 	pub fn is_ok(&self) -> bool {
 		matches!(self, Self::Completed(_))
 	}
 
+	/// Return true when presentation failed. Skipped presentation yields false.
 	pub fn is_err(&self) -> bool {
 		matches!(self, Self::Failed(_))
 	}
@@ -78,6 +95,9 @@ pub(crate) async fn supervise<F: Future>(future: F) -> Result<F::Output, Box<dyn
 	}
 }
 
+/// Drive the handler and view concurrently on the current executor. Progress uses the supplied
+/// bounded capacity; a view failure requests cooperative cancellation. Await the future through
+/// settlement to retain the report.
 pub async fn run<I, O, E, P, V>(
 	action: &Action<I, O, E, P>,
 	input: I,
@@ -180,6 +200,8 @@ pub struct PreparedInvocation<I, O, E, P, V> {
 }
 
 impl<I, O, E, P, V> PreparedInvocation<I, O, E, P, V> {
+	/// Bind an action, input and view for later execution with the supplied progress capacity
+	/// and cancellation token.
 	pub fn new(
 		action: Action<I, O, E, P>,
 		input: I,
@@ -196,6 +218,7 @@ impl<I, O, E, P, V> PreparedInvocation<I, O, E, P, V> {
 		}
 	}
 
+	/// Clone the invocation's cooperative cancellation handle.
 	pub fn cancellation(&self) -> Cancellation {
 		self.cancellation.clone()
 	}
@@ -204,6 +227,7 @@ impl<I, O, E, P, V> PreparedInvocation<I, O, E, P, V> {
 impl<I: Send, O: Send + Sync, E: Send + Sync, P: Send, V: View<O, E, P>>
 	PreparedInvocation<I, O, E, P, V>
 {
+	/// Consume the prepared invocation and await both handler and view settlement.
 	pub async fn run(self) -> ExecutionReport<O, E, V::Error, V::Completion> {
 		run(
 			&self.action,
@@ -217,12 +241,17 @@ impl<I: Send, O: Send + Sync, E: Send + Sync, P: Send, V: View<O, E, P>>
 }
 
 impl<O, E> ExecutionOutcome<O, E> {
+	/// Return true only for a normally returned successful domain result.
 	pub fn is_ok(&self) -> bool {
 		matches!(self, Self::Completed(Ok(_)))
 	}
 }
 
 impl<O: std::fmt::Debug, E: std::fmt::Debug> ExecutionOutcome<O, E> {
+	/// Return the successful domain value.
+	///
+	/// # Panics
+	/// Panics on a domain error or abnormal execution.
 	pub fn unwrap(self) -> O {
 		match self {
 			Self::Completed(result) => result.unwrap(),

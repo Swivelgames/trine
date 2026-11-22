@@ -1,4 +1,14 @@
 //! On-demand MCP tools over newline-delimited JSON-RPC.
+//!
+//! Expose an action with [`Entry::mcp`](crate::Entry::mcp) and serve its catalog
+//! with [`run_stdio`]. The stdio host implements MCP revision `2025-11-25`.
+//! After `initialize` and `notifications/initialized`, clients use `tools/list`
+//! and `tools/call`. Namespaced actions appear as dot-separated tool names.
+//!
+//! Domain errors are tool results with `isError: true`. To receive progress,
+//! supply a unique active `_meta.progressToken` with the call and register a
+//! progress-capable binding. Progress notifications echo the token and start at
+//! one. Closing stdin requests cancellation and lets accepted calls settle.
 
 use crate::{
 	Cancellation,

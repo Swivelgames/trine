@@ -1,3 +1,5 @@
+//! Heterogeneous actions and nested command paths in a single CLI registry.
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::{

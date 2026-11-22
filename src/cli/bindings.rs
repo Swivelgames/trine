@@ -76,6 +76,7 @@ impl Bindings {
 		self
 	}
 
+	/// Start with no mapped fields or aliases on this binding.
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -92,11 +93,13 @@ impl Bindings {
 		self
 	}
 
+	/// Append example text to the command's long help.
 	pub fn examples(mut self, text: &str) -> Self {
 		self.examples = Some(text.into());
 		self
 	}
 
+	/// Accept this input field as a positional argument in registration order.
 	pub fn positional(mut self, field: impl Into<String>) -> Self {
 		self.fields.push(Binding {
 			field: field.into(),
@@ -105,6 +108,7 @@ impl Bindings {
 		self
 	}
 
+	/// Map this field to a long option. Supply the spelling without the leading dashes.
 	pub fn option(mut self, field: impl Into<String>, long: impl Into<String>) -> Self {
 		self.fields.push(Binding {
 			field: field.into(),
@@ -113,6 +117,8 @@ impl Bindings {
 		self
 	}
 
+	/// Start a repeated object group. Each occurrence of the anchor option opens a new row;
+	/// subsequent child options apply to that row.
 	pub fn group(
 		mut self,
 		field: impl Into<String>,
@@ -139,6 +145,7 @@ pub struct Alias {
 }
 
 impl Alias {
+	/// Create an alternate command spelling with no preset values.
 	pub fn new(name: impl Into<String>) -> Self {
 		Self {
 			name: name.into(),
@@ -147,11 +154,13 @@ impl Alias {
 		}
 	}
 
+	/// Override the description shown in help for this alias.
 	pub fn description(mut self, text: &str) -> Self {
 		self.description = Some(text.into());
 		self
 	}
 
+	/// Assign a scalar input field whenever the alias is used.
 	pub fn set(mut self, field: impl Into<String>, value: impl Into<Value>) -> Self {
 		self.assignments.push((field.into(), value.into()));
 		self
