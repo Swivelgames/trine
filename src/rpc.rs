@@ -10,6 +10,8 @@
 //! produces a `rejected` notification and leaves the original response correlated
 //! with its request. Clean input EOF drains accepted work. See [`Config`] and
 //! [`serve`] to change limits or supply your own asynchronous streams.
+//! The [hosting guide](crate::guides::hosting_and_embedding) exercises a complete
+//! request with an in-memory reader and writer and compares RPC and MCP shutdown.
 
 use std::io;
 

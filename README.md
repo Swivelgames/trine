@@ -4,16 +4,19 @@
 
 Trine is a lightweight Rust library with all three interfaces built in. You write a typed async handler and choose how its output appears in the terminal. Trine parses command-line arguments, advertises MCP tools, and routes JSON-RPC requests over stdio for interprocess communication. Every caller reaches the same handler.
 
+## Documentation
+
+- **Start here** with [one action across three interfaces][first-action], then try [progress and cancellation][directory-scan] or [interactive decisions][interactive-decisions].
+- **Learn a topic** with [CLI inputs and completion][cli-inputs], [results and failures][results-and-failures], or [hosting and embedding][hosting-and-embedding].
+- **Look up an API** with `cargo doc --open` in this checkout or browse the [API reference][api-reference].
+
 ## Register your first action
 
-Add the dependencies for this example to your application's `Cargo.toml`:
+From your application's directory, add Trine and the dependencies used by this example.
 
-```toml
-[dependencies]
-trine = "0.0.1"
-schemars = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+```sh
+cargo add trine schemars serde_json
+cargo add serde --features derive
 ```
 
 The following catalog exposes a greeting through all three interfaces. The CLI accepts a positional name and prints a line of text. RPC and MCP accept an object with a `name` field and use the built-in Serde presentation. The last few lines exercise the RPC binding in process, so you can run the example without starting a server.
@@ -94,7 +97,7 @@ Your executable chooses which interface to run. Enable each interface you want w
 {"jsonrpc":"2.0","id":"1","method":"invoke","params":{"action":["greet"],"input":{"name":"Ada"}}}
 ```
 
-Both stdio hosts use stdout for protocol traffic. Send application logs to stderr. To supply your own asynchronous reader and writer, use the corresponding module's `serve` function.
+Both stdio hosts use stdout for protocol traffic. Send application logs to stderr.
 
 ## When your action grows
 
@@ -105,4 +108,12 @@ Both stdio hosts use stdout for protocol traffic. Send application logs to stder
 - **Interactive decisions.** Put confirmation and selection requests in the action. Views decide how to answer them. Enable the optional `cli-confirmation` Cargo feature for terminal prompt helpers.
 - **Interface-specific inputs.** Use `Entry::mcp_with_input` to advertise a smaller tool schema and translate it to the action's input. A custom structured view can also shape the terminal payload.
 
-[API reference](https://docs.rs/trine/0.0.1/trine/) · MIT licensed
+MIT licensed
+
+[cli-inputs]: docs/guides/cli-inputs.md
+[results-and-failures]: docs/guides/results-and-failures.md
+[hosting-and-embedding]: docs/guides/hosting-and-embedding.md
+[first-action]: docs/tutorials/first-action.md
+[directory-scan]: docs/tutorials/directory-scan.md
+[interactive-decisions]: docs/tutorials/interactive-decisions.md
+[api-reference]: https://docs.rs/trine/latest/trine/

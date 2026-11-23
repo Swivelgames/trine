@@ -1,4 +1,13 @@
-//! Invocation-scoped cooperative cancellation and optional bounded progress.
+//! Coordinate one running action with its caller.
+//!
+//! The handler receives an [`InvocationContext`] for each call. Send intermediate
+//! observations with [`InvocationContext::emit`], and check the [`Cancellation`]
+//! token at boundaries where the operation can safely stop. Every caller receives
+//! a terminal outcome even when it chooses to skip progress, provided the action
+//! settles and the connection remains available.
+//!
+//! The [directory scan tutorial](crate::tutorials::directory_scan) shows how a
+//! caller subscribes to filenames and how a handler returns a partial count.
 
 mod decision;
 pub use decision::{Confirmation, Selection};
@@ -151,6 +160,10 @@ impl<Event> InvocationContext<Event> {
 
 	/// Unobserved emission is a no-op, even after cancellation. Handlers check
 	/// cancellation separately at domain-safe boundaries.
+	///
+	/// With an observer, this future waits for capacity. Success means the event
+	/// entered the queue. The observer may still be rendering earlier events.
+	/// Cancellation can interrupt the wait with [`EmitError::Cancelled`].
 	pub async fn emit(&self, event: Event) -> Result<(), EmitError> {
 		let Some(events) = &self.events else {
 			return Ok(());

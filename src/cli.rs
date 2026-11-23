@@ -2,6 +2,10 @@
 //!
 //! Parsing (including help/version) is separate from execution. Bindings are
 //! explicit: the schema supplies types, not pluralization or command design.
+//!
+//! See the [CLI input guide](crate::guides::cli_inputs) for a worked example of
+//! grouping repeated operands, preserving native paths and completing a child
+//! option from the group at the cursor.
 
 mod bindings;
 mod command;

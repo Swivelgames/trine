@@ -9,6 +9,8 @@
 //! supply a unique active `_meta.progressToken` with the call and register a
 //! progress-capable binding. Progress notifications echo the token and start at
 //! one. Closing stdin requests cancellation and lets accepted calls settle.
+//! In particular, keep stdin open until a needed tool reply arrives. See the
+//! [hosting guide](crate::guides::hosting_and_embedding) for shutdown and embedding.
 
 use crate::{
 	Cancellation,

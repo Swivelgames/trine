@@ -20,7 +20,45 @@ pub struct StructuredBinding<O, E, P> {
 
 impl<O: Sync + 'static, E: Sync + 'static, P: Send + 'static> StructuredBinding<O, E, P> {
 	/// Construct each invocation's view with a factory that receives its own output sink.
-	/// Progress is initially disabled.
+	/// Progress is initially disabled. Use a custom binding when the public
+	/// response needs a different shape from the handler's Rust value. Submit
+	/// exactly one terminal payload during [`View::finish`].
+	///
+	/// ```
+	/// use trine::{Action, Application, Cancellation, Entry, InvocationContext};
+	/// use trine::error::Failure;
+	/// use trine::structured::{Payload, StructuredBinding, StructuredContext};
+	/// use trine::view::View;
+	/// use serde_json::json;
+	///
+	/// struct CountView(StructuredContext);
+	///
+	/// impl View<usize, String, ()> for CountView {
+	/// 	type Error = Failure;
+	/// 	type Completion = ();
+	///
+	/// 	async fn finish(&mut self, count: &Result<usize, String>) -> Result<(), Failure> {
+	/// 		let payload = match count {
+	/// 			Ok(n) => Payload::Success(json!({"files": n})),
+	/// 			Err(reason) => Payload::DomainFailure(json!({"reason": reason})),
+	/// 		};
+	/// 		self.0.terminal(payload).await
+	/// 	}
+	/// }
+	///
+	/// let count = Action::new("count", "Count selected files", |files: Vec<String>, _: InvocationContext<()>| async move {
+	/// 	Ok::<_, String>(files.len())
+	/// })?;
+	/// let mut app = Application::new("demo", "1")?;
+	/// app.register(Entry::new(count).rpc(StructuredBinding::custom(|ctx| Ok(CountView(ctx)))))?;
+	/// let call = app.invoke_rpc(&["count"], json!(["notes.txt"]), false, Cancellation::new())?;
+	/// assert_eq!(call.transcript.terminal, Some(Payload::Success(json!({"files": 1}))));
+	/// # Ok::<(), Box<dyn std::error::Error>>(())
+	/// ```
+	#[allow(
+		clippy::tabs_in_doc_comments,
+		reason = "Use crate indentation in the Rust example"
+	)]
 	pub fn custom<V, F>(factory: F) -> Self
 	where
 		V: View<O, E, P, Completion = ()> + 'static,
