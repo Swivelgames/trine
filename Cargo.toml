@@ -6,6 +6,9 @@ license = "MIT"
 repository = "https://github.com/Swivelgames/Trine"
 readme = "README.md"
 description = "Typed actions and views for CLI, JSON-RPC and MCP applications"
+keywords = ["cli", "cli-framework", "mcp", "json-rpc", "ipc"]
+categories = ["command-line-interface", "development-tools"]
+exclude = ["/.github/social-preview.jpg"]
 
 [dependencies]
 base64 = "0.22"
