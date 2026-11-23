@@ -22,11 +22,18 @@ impl CliViewContext {
 			return Ok(None);
 		}
 
+		self.stderr.write_all(b"\n")?;
 		let answer = Confirm::new(&request.message)
 			.with_default(false)
 			.with_render_config(prompt::style())
 			.prompt();
-		map_answer(answer, cancellation)
+
+		let answer = map_answer(answer, cancellation)?;
+		if answer.is_some() {
+			self.stderr.write_all(b"\n")?;
+		}
+
+		Ok(answer)
 	}
 }
 

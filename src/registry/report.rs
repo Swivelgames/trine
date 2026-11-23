@@ -45,6 +45,8 @@ impl<
 pub struct DispatchReport {
 	/// Whether framework diagnostics were delivered or required fallback.
 	pub diagnostics: crate::diagnostics::DiagnosticDelivery,
+	/// Whether execution reached the handler.
+	pub action_started: bool,
 	/// Whether the handler returned an `Ok` domain value.
 	pub domain_succeeded: bool,
 	/// Whether terminal presentation completed successfully.
@@ -83,6 +85,10 @@ impl DispatchReport {
 
 		Self {
 			diagnostics: Default::default(),
+			action_started: !matches!(
+				report.outcome,
+				crate::execution::ExecutionOutcome::NotStarted
+			),
 			domain_succeeded: report.outcome.is_ok(),
 			presentation_succeeded: report.presentation.is_ok(),
 			presentation_status,

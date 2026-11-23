@@ -8,6 +8,7 @@ use trine::{
 
 fn diagnostic() -> Diagnostic {
 	Diagnostic {
+		action_started: true,
 		execution_failure: Some("handler panicked".into()),
 		domain_returned_ok: false,
 		presentation_failure: None,
@@ -112,6 +113,7 @@ fn primary_error_formatting_panic_retains_error_and_delivers_literal_fallback() 
 #[test]
 fn presentation_error_formatting_panic_preserves_settled_report() {
 	use trine::{Action, Application, Cancellation, Entry, InvocationContext, view::View};
+
 	struct BrokenView;
 	impl View<usize, (), ()> for BrokenView {
 		type Completion = ();
@@ -123,6 +125,7 @@ fn presentation_error_formatting_panic_preserves_settled_report() {
 			Err(PanickingDisplay)
 		}
 	}
+
 	let action = Action::new("run", "Run", |_: (), _: InvocationContext<()>| async {
 		Ok::<_, ()>(7)
 	})
@@ -134,6 +137,7 @@ fn presentation_error_formatting_panic_preserves_settled_report() {
 		})),
 	)
 	.unwrap();
+
 	let report = app
 		.invoke_rpc(
 			&["run"],
@@ -142,6 +146,7 @@ fn presentation_error_formatting_panic_preserves_settled_report() {
 			Cancellation::new(),
 		)
 		.unwrap();
+
 	assert!(report.execution.domain_succeeded);
 	assert_eq!(
 		report.execution.presentation_failure(),
@@ -156,9 +161,11 @@ fn presentation_error_formatting_panic_preserves_settled_report() {
 			.unwrap()
 			.is::<PanickingDisplay>()
 	);
+
 	assert!(report.execution.diagnostics.attempted);
 	assert!(report.execution.diagnostics.failure.is_none());
 	assert!(report.transcript.diagnostics[0].contains("presentation error formatting panicked"));
+
 	assert!(matches!(
 		report
 			.execution

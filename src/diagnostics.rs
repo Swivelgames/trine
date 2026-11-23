@@ -14,6 +14,8 @@ use std::{
 pub struct Diagnostic {
 	/// Execution failure detail when the handler could not return a domain result.
 	pub execution_failure: Option<String>,
+	/// Whether execution reached the handler.
+	pub action_started: bool,
 	/// Whether the handler returned a successful domain result.
 	pub domain_returned_ok: bool,
 	/// Classification of a failed view, if any.
@@ -34,6 +36,7 @@ impl Diagnostic {
 
 		Some(Self {
 			execution_failure: report.execution_failure.as_ref().map(|e| e.message.clone()),
+			action_started: report.action_started,
 			domain_returned_ok: report.domain_succeeded,
 			presentation_failure: report.presentation_failure(),
 			presentation_message: report.presentation_cause().map(|error| {
@@ -49,6 +52,7 @@ impl Diagnostic {
 	pub fn message(&self) -> String {
 		let mut message = match &self.execution_failure {
 			Some(error) => format!("Execution terminated: {error}; effects may be incomplete."),
+			None if !self.action_started => "Presentation failed before the action started.".into(),
 			None if self.domain_returned_ok => {
 				"The action returned an outcome, but presentation failed.".into()
 			}

@@ -10,12 +10,12 @@ impl CliViewContext {
 }
 
 pub(super) fn style() -> RenderConfig<'static> {
-	// Inquire adds one separator space after each prefix: three plain spaces
-	// yield a four-space inset without its default question/answer ornaments.
+	// Inquire inserts a separator after each prefix. One plain space aligns
+	// the question and answer with the two-space CLI heading.
 	let mut render = RenderConfig::empty();
-	render.prompt_prefix = Styled::new("   ");
-	render.answered_prompt_prefix = Styled::new("   ");
-	render.error_message.prefix = Styled::new("   ");
+	render.prompt_prefix = Styled::new(" ");
+	render.answered_prompt_prefix = Styled::new(" ");
+	render.error_message.prefix = Styled::new(" ");
 	render.canceled_prompt_indicator = Styled::new("cancelled");
 	render
 }

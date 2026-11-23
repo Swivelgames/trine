@@ -30,6 +30,10 @@ impl<O: Sync, E: Sync, P: Send, V: View<O, E, P, Completion = ()>> View<O, E, P>
 		self.view.select(request, cancellation).await
 	}
 
+	async fn start(&mut self) -> Result<(), Self::Error> {
+		self.view.start().await
+	}
+
 	async fn progress(&mut self, event: P) -> Result<(), Self::Error> {
 		self.view.progress(event).await
 	}

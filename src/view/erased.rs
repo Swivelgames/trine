@@ -7,6 +7,7 @@ use std::{future::Future, pin::Pin};
 type ViewFuture<'a, C = ()> = Pin<Box<dyn Future<Output = Result<C, Failure>> + Send + 'a>>;
 
 trait DynView<O, E, P, C>: Send {
+	fn start(&mut self) -> ViewFuture<'_>;
 	fn progress(&mut self, event: P) -> ViewFuture<'_>;
 	fn confirm(
 		&mut self,
@@ -52,6 +53,15 @@ where
 		Box::pin(async move {
 			self.0
 				.select(request, cancellation)
+				.await
+				.map_err(|e| Failure::from_box(FailureKind::OutputFailed, e.into()))
+		})
+	}
+
+	fn start(&mut self) -> ViewFuture<'_> {
+		Box::pin(async move {
+			self.0
+				.start()
 				.await
 				.map_err(|e| Failure::from_box(FailureKind::OutputFailed, e.into()))
 		})
@@ -107,6 +117,10 @@ impl<O: Sync, E: Sync, P: Send + 'static, C: Send> View<O, E, P> for ErasedView<
 		cancellation: crate::Cancellation,
 	) -> Result<Option<usize>, Failure> {
 		self.0.select(request, cancellation).await
+	}
+
+	async fn start(&mut self) -> Result<(), Failure> {
+		self.0.start().await
 	}
 
 	async fn progress(&mut self, event: P) -> Result<(), Failure> {

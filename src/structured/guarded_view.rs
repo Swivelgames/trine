@@ -15,6 +15,10 @@ impl<O: Sync, E: Sync, P: Send + 'static> View<O, E, P> for GuardedView<O, E, P>
 	type Completion = ();
 	type Error = Failure;
 
+	async fn start(&mut self) -> Result<(), Failure> {
+		self.view.start().await
+	}
+
 	async fn progress(&mut self, event: P) -> Result<(), Failure> {
 		self.view.progress(event).await
 	}

@@ -84,6 +84,7 @@ where
 		let cli = cli.clone();
 		let factory = factory.clone();
 		let projection = projection.clone();
+
 		let prepare_view = move |context: CliViewContext,
 		                         json: bool,
 		                         cancellation: Cancellation,
@@ -102,6 +103,7 @@ where
 			let stderr = context.stderr.clone();
 			let view = factory(context).map_err(InvocationError::Setup)?;
 			let view = ErasedView::new(projection.human(view));
+
 			Ok(execution::prepare_human(
 				cli,
 				input,
@@ -116,6 +118,7 @@ where
 		Ok(Parsed::Input(PreparedCli {
 			prepare: Box::new(prepare_view),
 			json: false,
+			heading: None,
 			renderer: Default::default(),
 		}))
 	});

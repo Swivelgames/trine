@@ -141,6 +141,7 @@ fn json_preserves_aliases_namespaces_and_shared_exit_without_human_factory() {
 		vec!["demo", "task", "checkout", "api", "--json"],
 	] {
 		let output = run(&app, args);
+
 		assert_eq!(output.exit_code, 7);
 		assert_eq!(
 			output.stdout.json(),
@@ -151,6 +152,7 @@ fn json_preserves_aliases_namespaces_and_shared_exit_without_human_factory() {
 		assert!(!output.stdout.text().contains('\t'));
 		assert!(output.stderr.text().is_empty());
 	}
+
 	assert_eq!(factories.load(Ordering::SeqCst), 0);
 	assert_eq!(run(&app, ["demo", "task", "create", "api"]).exit_code, 7);
 	assert_eq!(factories.load(Ordering::SeqCst), 1);
@@ -185,6 +187,7 @@ fn json_preserves_native_path_encoding() {
 		use std::os::windows::ffi::OsStringExt;
 		OsString::from_wide(&[65, 0xd800])
 	};
+
 	let app = application(Arc::default());
 	let expected = serde_json::to_value(NativePath::new(path.clone()).unwrap()).unwrap();
 	let output = run(
@@ -392,6 +395,7 @@ fn completion_projection_preserves_native_hints_and_namespace_flags() {
 		.find(|arg| arg.get_id() == "input-path")
 		.unwrap();
 	assert_eq!(path.get_value_hint(), clap::ValueHint::AnyPath);
+
 	let candidates = trine::cli::completion::complete(
 		command.clone(),
 		trine::cli::completion::Context::new(
@@ -402,4 +406,93 @@ fn completion_projection_preserves_native_hints_and_namespace_flags() {
 	)
 	.unwrap();
 	assert!(candidates.contains(&"checkout".into()));
+}
+
+struct OpeningView {
+	output: Output,
+	fail: bool,
+}
+
+impl View<bool, bool, ()> for OpeningView {
+	type Completion = ();
+	type Error = io::Error;
+
+	async fn start(&mut self) -> io::Result<()> {
+		self.output.write_all(b"opening\n")?;
+		if self.fail {
+			return Err(io::Error::other("opening failed"));
+		}
+		Ok(())
+	}
+
+	async fn finish(&mut self, _: &Result<bool, bool>) -> io::Result<()> {
+		self.output.write_all(b"finished\n")
+	}
+}
+
+#[test]
+fn human_heading_and_view_opening_precede_action_and_leave_json_clean() {
+	for fail in [false, true] {
+		let stdout = Capture::default();
+		let observed = stdout.clone();
+		let action = Action::new(
+			"open",
+			"Open a task",
+			move |_: Input, _: InvocationContext<()>| {
+				let opening_was_delivered = observed.text() == "Workyard\nopening\n";
+				async move { Ok::<_, bool>(opening_was_delivered) }
+			},
+		)
+		.unwrap();
+
+		let mut app = Application::new("demo", "1").unwrap();
+		app.cli_heading("Workyard");
+		let observed = stdout.clone();
+		app.register(Entry::new(action).cli(
+			input_binding(),
+			move |context| {
+				assert_eq!(observed.text(), "Workyard\n");
+				Ok(OpeningView {
+					output: context.stdout,
+					fail,
+				})
+			},
+			|_| 0,
+		))
+		.unwrap();
+
+		let Parsed::Input(prepared) = app.parse_cli(["demo", "open", "api"]).unwrap() else {
+			panic!("expected invocation")
+		};
+		let stderr = Capture::default();
+		let context = CliViewContext {
+			stdout: Output::new(stdout.clone()),
+			stderr: Output::new(stderr.clone()),
+		};
+		let prepared = prepared.prepare(context, Cancellation::new()).unwrap();
+		assert_eq!(stdout.text(), "Workyard\n");
+
+		let report = prepared.run();
+		if fail {
+			assert!(!report.action_started);
+			assert_eq!(report.exit_code(), 1);
+			assert!(stderr.text().contains("before the action started"));
+			assert_eq!(stdout.text(), "Workyard\nopening\n");
+		} else {
+			let report = report
+				.typed_completion::<bool, bool, trine::error::Failure, trine::application::CliCompletion>(
+				)
+				.unwrap();
+			assert_eq!(report.outcome, Ok(true));
+			assert_eq!(stdout.text(), "Workyard\nopening\nfinished\n");
+		}
+
+		stdout.0.lock().unwrap().clear();
+		let json = run(&app, ["demo", "open", "api", "--json"]);
+		assert_eq!(
+			json.stdout.json(),
+			json!({"exit_code": 0, "result": false, "error": null})
+		);
+		assert!(json.stderr.text().is_empty());
+	}
 }

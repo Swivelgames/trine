@@ -142,6 +142,7 @@ pub struct Application {
 	version: String,
 	entries: BTreeMap<Vec<String>, Registered>,
 	cli_routes: CliRoutes,
+	cli_heading: Option<Arc<str>>,
 }
 
 impl Application {
@@ -160,6 +161,7 @@ impl Application {
 			version: version.into(),
 			entries: BTreeMap::new(),
 			cli_routes: CliRoutes::default(),
+			cli_heading: None,
 		})
 	}
 
@@ -265,6 +267,12 @@ impl Application {
 			.collect()
 	}
 
+	/// Set the heading written to CLI stdout before constructing a human action view.
+	/// The heading gets a trailing newline and is omitted for JSON, help and version output.
+	pub fn cli_heading(&mut self, heading: impl Into<String>) {
+		self.cli_heading = Some(Arc::from(heading.into()));
+	}
+
 	/// Project the registered commands for help, host composition and completions.
 	pub fn cli_command(&self) -> Command {
 		self.cli_routes.command(&self.program, &self.version)
@@ -276,12 +284,19 @@ impl Application {
 		&self,
 		arguments: impl IntoIterator<Item = impl Into<OsString>>,
 	) -> Result<Parsed<PreparedCli>, CliError> {
-		self.cli_routes.parse(
-			&self.program,
-			&self.version,
-			arguments,
-			self.diagnostics.cli.clone(),
-		)
+		self.cli_routes
+			.parse(
+				&self.program,
+				&self.version,
+				arguments,
+				self.diagnostics.cli.clone(),
+			)
+			.map(|mut parsed| {
+				if let Parsed::Input(prepared) = &mut parsed {
+					prepared.heading = self.cli_heading.clone();
+				}
+				parsed
+			})
 	}
 
 	/// Run an RPC invocation synchronously in process and collect its structured presentation.

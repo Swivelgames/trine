@@ -42,10 +42,6 @@ impl View<String, String, ()> for GreetingView {
 	type Error = io::Error;
 	type Completion = ();
 
-	async fn progress(&mut self, _: ()) -> io::Result<()> {
-		Ok(())
-	}
-
 	async fn finish(&mut self, result: &Result<String, String>) -> io::Result<()> {
 		let (stream, text) = match result {
 			Ok(greeting) => (&self.0.stdout, greeting),
@@ -102,6 +98,7 @@ Both stdio hosts use stdout for protocol traffic. Send application logs to stder
 
 ## When your action grows
 
+- **Opening output.** Set a shared text heading with `Application::cli_heading`. Trine writes it before constructing a human CLI view. Implement `View::start` for invocation-specific output before the handler begins. Both hooks are optional.
 - **Progress and cancellation.** Give the action an event type and emit progress through its `InvocationContext`. A CLI view can render each event. For structured output, choose `StructuredBinding::serde_with_progress` and a bounded capacity. A slow observer can make emission wait. Check the cancellation token at points where your operation can safely stop.
 - **Commands and flags.** Map schema fields to positionals, named options or repeated groups with `Bindings`. Use `Entry::namespace` for nested commands. The command tree also supplies shell completions.
 - **Filesystem paths.** Use `NativePath` when an argument must round-trip an OS path, including names outside Unicode. Mark the binding with `Bindings::native_path` for native CLI input.

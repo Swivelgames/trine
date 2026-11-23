@@ -15,6 +15,7 @@ pub(super) type PrepareCliView = dyn FnOnce(
 pub struct PreparedCli {
 	pub(super) prepare: Box<PrepareCliView>,
 	pub(super) json: bool,
+	pub(super) heading: Option<std::sync::Arc<str>>,
 	pub(super) renderer: crate::diagnostics::DiagnosticRenderer,
 }
 
@@ -28,12 +29,26 @@ impl PreparedCli {
 		Ok(self.prepare(context, cancellation)?.run())
 	}
 
-	/// Construct the selected view now and retain the action for later execution.
+	/// Write any human CLI heading and construct the selected view for later execution.
 	pub fn prepare(
 		self,
 		context: CliViewContext,
 		cancellation: Cancellation,
 	) -> Result<PreparedCliExecution, InvocationError> {
+		if !self.json
+			&& let Some(heading) = self.heading
+		{
+			context
+				.stdout
+				.write_all(format!("{heading}\n").as_bytes())
+				.map_err(|error| {
+					InvocationError::Setup(crate::error::Failure::new(
+						crate::error::FailureKind::OutputFailed,
+						error,
+					))
+				})?;
+		}
+
 		(self.prepare)(context, self.json, cancellation, self.renderer)
 	}
 }

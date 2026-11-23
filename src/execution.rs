@@ -19,6 +19,8 @@ pub struct ExecutionFailure {
 /// Settlement of the handler, tracked independently of the view.
 #[derive(Debug)]
 pub enum ExecutionOutcome<O, E> {
+	/// The view failed before the handler could start.
+	NotStarted,
 	/// The handler returned its domain result, including any domain error.
 	Completed(Result<O, E>),
 	/// Execution terminated abnormally.
@@ -41,6 +43,15 @@ pub struct ExecutionReport<O, E, V, C = ()> {
 	pub outcome: ExecutionOutcome<O, E>,
 	/// View settlement, including its completion value when successful.
 	pub presentation: PresentationState<C, PresentationFailure<V>>,
+}
+
+impl<O, E, V, C> ExecutionReport<O, E, V, C> {
+	pub(crate) fn startup_failed(failure: PresentationFailure<V>) -> Self {
+		Self {
+			outcome: ExecutionOutcome::NotStarted,
+			presentation: PresentationState::Failed(failure),
+		}
+	}
 }
 
 /// Whether the view finished, failed, or had no domain result to present.
@@ -95,13 +106,29 @@ pub(crate) async fn supervise<F: Future>(future: F) -> Result<F::Output, Box<dyn
 	}
 }
 
+/// Keep startup on the same panic boundary as later presentation.
+pub(crate) async fn start_view<O, E, P, V: View<O, E, P>>(
+	mut view: V,
+) -> Result<V, PresentationFailure<V::Error>> {
+	match supervise(async { view.start().await }).await {
+		Ok(Ok(())) => Ok(view),
+		result => {
+			let cleanup = catch_unwind(AssertUnwindSafe(|| drop(view)));
+			match (result, cleanup) {
+				(Ok(Err(error)), Ok(())) => Err(PresentationFailure::Output(error)),
+				_ => Err(PresentationFailure::Panicked),
+			}
+		}
+	}
+}
+
 /// Drive the handler and view concurrently on the current executor. Progress uses the supplied
 /// bounded capacity; a view failure requests cooperative cancellation. Await the future through
 /// settlement to retain the report.
 pub async fn run<I, O, E, P, V>(
 	action: &Action<I, O, E, P>,
 	input: I,
-	mut view: V,
+	view: V,
 	capacity: Option<NonZeroUsize>,
 	cancellation: Cancellation,
 ) -> ExecutionReport<O, E, V::Error, V::Completion>
@@ -111,6 +138,11 @@ where
 	P: Send,
 	V: View<O, E, P>,
 {
+	let mut view = match start_view(view).await {
+		Ok(view) => view,
+		Err(presentation) => return ExecutionReport::startup_failed(presentation),
+	};
+
 	let (context, events) = match capacity {
 		Some(capacity) => {
 			let (context, events) = InvocationContext::observed(capacity, cancellation.clone());
@@ -138,6 +170,7 @@ where
 		let outcome = Arc::new(outcome);
 		let _ = terminal_tx.try_send(outcome.clone());
 		drop(terminal_tx);
+
 		outcome
 	};
 
@@ -174,6 +207,7 @@ where
 			}
 			cancellation.cancel();
 		}
+
 		result
 	};
 
@@ -255,6 +289,7 @@ impl<O: std::fmt::Debug, E: std::fmt::Debug> ExecutionOutcome<O, E> {
 	pub fn unwrap(self) -> O {
 		match self {
 			Self::Completed(result) => result.unwrap(),
+			Self::NotStarted => panic!("handler did not start"),
 			Self::Failed(failure) => panic!("execution failed: {}", failure.message),
 		}
 	}

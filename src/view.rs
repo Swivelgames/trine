@@ -24,6 +24,12 @@ pub trait View<Output, Error, Event>: Send {
 	/// Value returned after successful terminal presentation.
 	type Completion: Send;
 
+	/// Present an invocation's opening output before its handler starts.
+	/// The default produces no output. An error prevents the handler from running.
+	fn start(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send {
+		async { Ok(()) }
+	}
+
 	/// Answer a yes-or-no request. The default declines to supply an answer; interactive
 	/// implementations can monitor cancellation.
 	fn confirm(
@@ -44,8 +50,10 @@ pub trait View<Output, Error, Event>: Send {
 		async { Ok(None) }
 	}
 
-	/// Present the next accepted progress event in delivery order.
-	fn progress(&mut self, event: Event) -> impl Future<Output = Result<(), Self::Error>> + Send;
+	/// Present the next accepted progress event in delivery order. The default ignores it.
+	fn progress(&mut self, _event: Event) -> impl Future<Output = Result<(), Self::Error>> + Send {
+		async { Ok(()) }
+	}
 
 	/// Present the returned domain result and produce a completion value. A handler panic
 	/// leaves this callback uncalled.
@@ -72,6 +80,11 @@ where
 	Event: Send,
 	V: View<Output, Error, Event>,
 {
+	let view = match smol::block_on(crate::execution::start_view(view)) {
+		Ok(view) => view,
+		Err(presentation) => return Report::startup_failed(presentation),
+	};
+
 	let (context, events) = match capacity {
 		Some(capacity) => {
 			let (context, events) = InvocationContext::observed(capacity, cancellation.clone());
@@ -133,6 +146,7 @@ where
 		smol::block_on(async {
 			let mut progress_open = events.is_some();
 			let mut decisions_open = true;
+
 			while progress_open || decisions_open {
 				let progress = async {
 					if !progress_open {
@@ -147,12 +161,14 @@ where
 							.ok(),
 					)
 				};
+
 				let decision = async {
 					if !decisions_open {
 						return std::future::pending().await;
 					}
 					Delivery::Decision(decisions.recv().await.ok())
 				};
+
 				let result = match futures_lite::future::or(progress, decision).await {
 					Delivery::Progress(Some(event)) => view.progress(event).await,
 					Delivery::Progress(None) => {
@@ -167,6 +183,7 @@ where
 						continue;
 					}
 				};
+
 				if let Err(error) = result {
 					if let Some(events) = &events {
 						events.close();
@@ -180,11 +197,14 @@ where
 			let Ok(result) = terminal_rx.recv().await else {
 				return PresentationState::Skipped;
 			};
+
 			match result.as_ref() {
 				ExecutionOutcome::Completed(result) => PresentationState::from(
 					view.finish(result).await.map_err(PresentationError::Output),
 				),
-				ExecutionOutcome::Failed(_) => PresentationState::Skipped,
+				ExecutionOutcome::Failed(_) | ExecutionOutcome::NotStarted => {
+					PresentationState::Skipped
+				}
 			}
 		})
 	}));
